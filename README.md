@@ -4,6 +4,7 @@ Expenso is a personal expense tracker that helps users manage their daily income
 
 ## Features
 - Add,edit and delete income and expenses
+- User registration & login
 - Categorize transactions
 - View total balance
 - Monthly summary
