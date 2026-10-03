@@ -1,3 +1,4 @@
+
 # Expenso 💸
 ### Smart Personal Finance Tracker with AI & OCR
 
@@ -70,3 +71,99 @@ Unlike traditional expense trackers, Expenso features a **Human-in-the-Loop (HIT
        |
        v
 [ REACT NATIVE APP renders the UI ]
+```
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+Make sure you have the following installed:
+- Node.js (v18 or higher)
+- React Native CLI (or Expo CLI)
+- Android Studio / Xcode (for emulators)
+- MongoDB Atlas account (or local MongoDB server)
+- OpenAI API Key
+
+### 1. Backend Setup (Node.js)
+```bash
+# Clone the repository
+git clone https://github.com/your-username/expenso-backend.git
+cd expenso-backend
+
+# Install dependencies
+npm install
+
+# Create a .env file and add the following:
+PORT=5000
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_secret_key
+OPENAI_API_KEY=your_openai_api_key
+
+# Start the server
+npm run dev
+```
+
+### 2. Frontend Setup (React Native)
+```bash
+# Clone the repository
+git clone https://github.com/your-username/expenso-frontend.git
+cd expenso-frontend
+
+# Install dependencies
+npm install
+# or
+yarn install
+
+# Run the app (Android)
+npx react-native run-android
+
+# Run the app (iOS)
+npx react-native run-ios
+```
+
+---
+
+## 📂 Project Structure
+
+```text
+expenso/
+├── backend/
+│   ├── config/          # MongoDB connection
+│   ├── controllers/     # Route logic (Auth, Transactions, AI)
+│   ├── middleware/      # JWT verification, Error handling
+│   ├── models/          # Mongoose schemas (User, Transaction)
+│   ├── routes/          # Express API routes
+│   └── server.js        # Entry point
+│
+└── frontend/
+    ├── src/
+    │   ├── components/  # Reusable UI components (Cards, Buttons)
+    │   ├── screens/     # UI Screens (Auth, Dashboard, AI Chat)
+    │   ├── navigation/  # React Navigation setup
+    │   ├── services/    # API & OCR services (axios, ML Kit)
+    │   ├── store/       # State management (Redux/Zustand)
+    │   └── utils/       # Helper functions
+    ├── App.js           # App entry point
+    └── package.json
+```
+
+---
+
+## 🔮 Future Improvements
+- [ ] **Bank Integration:** Integrate Plaid API (Sandbox) to automatically pull bank transactions.
+- [ ] **Advanced ML:** Implement a linear regression model for predictive cash flow forecasting.
+- [ ] **Export to PDF:** Allow users to download monthly financial reports as PDFs.
+- [ ] **Multi-Currency Support:** Live exchange rate conversion for travelers.
+- [ ] **Dark Mode:** Full dark mode support for both React Native Mobile and Web (via React Native Web).
+
+---
+
+## 👥 Contributors
+- **[Your Name]** - *Full Stack Developer & UI/UX Designer*
+- **[Group Member 2]** - *Backend Developer*
+- **[Group Member 3]** - *React Native Developer*
+
+## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```
