@@ -1,7 +1,7 @@
 # Expenso 💸
 ### Smart Personal Finance Tracker with AI & OCR
 
-[![Flutter](https://img.shields.io/badge/Flutter-%2302569B.svg?style=for-the-badge&logo=Flutter&logoColor=white)](https://flutter.dev/)
+[![React Native](https://img.shields.io/badge/React_Native-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)](https://reactnative.dev/)
 [![Node.js](https://img.shields.io/badge/Node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-%234ea94b.svg?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://openai.com/)
@@ -36,14 +36,14 @@ Unlike traditional expense trackers, Expenso features a **Human-in-the-Loop (HIT
 
 | Layer | Technology |
 | :--- | :--- |
-| **Frontend (Mobile + Web)** | Flutter, Dart |
-| **State Management** | Riverpod / Provider |
+| **Frontend (Mobile + Web)** | React Native, JavaScript / TypeScript |
+| **State Management** | Redux Toolkit / Zustand / Context API |
 | **Backend API** | Node.js, Express.js |
 | **Database** | MongoDB (MongoDB Atlas) |
 | **Authentication** | JWT (JSON Web Tokens) |
 | **AI / NLP** | OpenAI API (GPT-3.5/4o-mini) |
-| **OCR (Receipt Scanning)** | Google ML Kit (Flutter Package) |
-| **Charts & Visuals** | `fl_chart`, `flutter_heatmap_calendar` |
+| **OCR (Receipt Scanning)** | `react-native-mlkit-ocr` (or similar on-device OCR) |
+| **Charts & Visuals** | `react-native-chart-kit` / `victory-native` |
 | **Design & Prototyping** | Figma |
 
 ---
@@ -51,10 +51,10 @@ Unlike traditional expense trackers, Expenso features a **Human-in-the-Loop (HIT
 ## 🏗️ System Architecture
 
 ```text
-[ FLUTTER APP (Frontend) ]
+[ REACT NATIVE APP (Frontend) ]
        |
-       | 1. User logs in via Flutter UI
-       | 2. Flutter sends HTTP Request (using `dio` package) to Node API
+       | 1. User logs in via React Native UI
+       | 2. React Native sends HTTP Request (using `axios` or `fetch`) to Node API
        v
 [ NODE.JS + EXPRESS (Backend API) ]
        |
@@ -66,7 +66,7 @@ Unlike traditional expense trackers, Expenso features a **Human-in-the-Loop (HIT
        |
        | 6. Saves/Retrieves data
        v
-[ NODE.JS sends JSON Response back to Flutter ]
+[ NODE.JS sends JSON Response back to React Native ]
        |
        v
-[ FLUTTER APP renders the UI ]
+[ REACT NATIVE APP renders the UI ]
