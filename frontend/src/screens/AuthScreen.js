@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 
-export default function AuthScreen() {
-  const [isLogin, setIsLogin] = useState(true);
+export default function AuthScreen({ route }) {
+  const initialIsSignUp = route?.params?.isSignUp ?? false;
+  const [isLogin, setIsLogin] = useState(!initialIsSignUp);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,6 +22,7 @@ export default function AuthScreen() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const { login, register } = useContext(AuthContext);
+
 
   const handleSubmit = async () => {
     setErrorMsg('');

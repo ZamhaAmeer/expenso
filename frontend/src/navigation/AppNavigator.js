@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthContext } from '../context/AuthContext';
 
+import GetStartedScreen from '../screens/GetStartedScreen';
 import AuthScreen from '../screens/AuthScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import AIChatScreen from '../screens/AIChatScreen';
@@ -71,9 +72,13 @@ export default function AppNavigator() {
         {user ? (
           <Stack.Screen name="Main" component={MainTabs} />
         ) : (
-          <Stack.Screen name="Auth" component={AuthScreen} />
+          <>
+            <Stack.Screen name="GetStarted" component={GetStartedScreen} />
+            <Stack.Screen name="Auth" component={AuthScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
+
