@@ -36,19 +36,37 @@ const STARS = [
 ];
 
 export default function GetStartedScreen({ navigation, onGetStarted, onSignIn }) {
-  // Animation References
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  // Animation References - Separated for staggered sequence
+  const logoFade = useRef(new Animated.Value(0)).current;
+  const textFade = useRef(new Animated.Value(0)).current;
+  const buttonFade = useRef(new Animated.Value(0)).current;
+
   const logoFloat = useRef(new Animated.Value(0)).current;
   const orbitSpin = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // 1. Entrance Fade
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 800,
-      useNativeDriver,
-    }).start();
+    // 1. Staggered Entrance Sequence matching the video
+    Animated.sequence([
+      Animated.delay(800), // Show only background initially
+      Animated.timing(logoFade, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver,
+      }),
+      Animated.delay(300), // Slight pause before text
+      Animated.timing(textFade, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver,
+      }),
+      Animated.delay(300), // Slight pause before button
+      Animated.timing(buttonFade, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver,
+      }),
+    ]).start();
 
     // 2. Subtle Floating Animation for Central 3D Emblem
     Animated.loop(
@@ -155,11 +173,11 @@ export default function GetStartedScreen({ navigation, onGetStarted, onSignIn })
       </View>
 
       <SafeAreaView style={styles.safeArea}>
-        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-          
+        <View style={styles.content}>
+
           {/* HERO SECTION: Center Orbital Graphic & 3D Emblem */}
-          <View style={styles.heroContainer}>
-            
+          <Animated.View style={[styles.heroContainer, { opacity: logoFade }]}>
+
             {/* Outer Rotating Orbital Rings & Planet Dots */}
             <Animated.View
               style={[
@@ -221,19 +239,19 @@ export default function GetStartedScreen({ navigation, onGetStarted, onSignIn })
                 resizeMode="contain"
               />
             </Animated.View>
-          </View>
+          </Animated.View>
 
           {/* TEXT SECTION: App Title & Subtitle */}
-          <View style={styles.textSection}>
+          <Animated.View style={[styles.textSection, { opacity: textFade }]}>
             <Text style={styles.appTitle}>Expenso</Text>
             <Text style={styles.appSubtitle}>
               Intelligent wealth tracking & expense intelligence in Sri Lankan Rupees.
             </Text>
-          </View>
+          </Animated.View>
 
           {/* ACTION SECTION: Button & Sign In Link */}
-          <View style={styles.actionSection}>
-            
+          <Animated.View style={[styles.actionSection, { opacity: buttonFade }]}>
+
             {/* Primary Gradient Pill Button */}
             <TouchableOpacity
               activeOpacity={0.9}
@@ -260,20 +278,10 @@ export default function GetStartedScreen({ navigation, onGetStarted, onSignIn })
               </Animated.View>
             </TouchableOpacity>
 
-            {/* Footer Link: Already registered? Sign In */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={handleSignIn}
-              style={styles.signInTouch}
-            >
-              <Text style={styles.signInText}>
-                Already registered?{' '}
-                <Text style={styles.signInHighlight}>Sign In to Expenso</Text>
-              </Text>
-            </TouchableOpacity>
-          </View>
 
-        </Animated.View>
+          </Animated.View>
+
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -292,8 +300,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 28,
-    paddingTop: height * 0.08,
-    paddingBottom: height * 0.05,
+    paddingTop: height * 0.06,
+    paddingBottom: height * 0.04,
   },
 
   /* Background Glows */
@@ -330,7 +338,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    marginTop: height * 0.04,
+    marginTop: height * 0.02,
   },
   orbitalWrapper: {
     position: 'absolute',
@@ -362,14 +370,23 @@ const styles = StyleSheet.create({
   /* Text Section */
   textSection: {
     alignItems: 'center',
-    marginVertical: 10,
+    marginTop: 18,
+    marginBottom: 12,
   },
   appTitle: {
-    fontSize: 40,
-    fontWeight: '800',
+    fontSize: 38,
+    fontWeight: '900',
+    fontFamily: Platform.select({
+      ios: 'Avenir-Black',
+      android: 'sans-serif-condensed',
+      web: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    }),
     color: '#FFFFFF',
-    letterSpacing: -0.5,
-    marginBottom: 10,
+    letterSpacing: -0.6,
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   appSubtitle: {
     fontSize: 15,
@@ -383,7 +400,8 @@ const styles = StyleSheet.create({
   actionSection: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: 8,
+    marginTop: 16,
+    marginBottom: 12,
   },
   buttonTouch: {
     width: '100%',
@@ -416,17 +434,5 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
-  /* Footer Link */
-  signInTouch: {
-    marginTop: 20,
-    paddingVertical: 6,
-  },
-  signInText: {
-    color: '#94A3B8',
-    fontSize: 14,
-  },
-  signInHighlight: {
-    color: '#00B4D8',
-    fontWeight: '700',
-  },
+
 });
