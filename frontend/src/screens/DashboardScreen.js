@@ -9,6 +9,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   Image,
+  Modal,
   Dimensions,
   Platform,
 } from 'react-native';
@@ -67,6 +68,45 @@ const DEFAULT_TRANSACTIONS = [
   },
 ];
 
+// Initial Notification Items matching popup design mockup
+const INITIAL_NOTIFICATIONS = [
+  {
+    id: 'n1',
+    type: 'alert',
+    title: 'Smart Budget Alert',
+    time: '2m ago',
+    description: 'Dining reached 85% of monthly limit (Rs. 24,000 / 28,000).',
+    highlight: '85%',
+    icon: 'warning-outline',
+    iconBg: '#FEF3C7',
+    iconColor: '#D97706',
+    hasActions: true,
+    isUnread: true,
+  },
+  {
+    id: 'n2',
+    type: 'transaction',
+    title: 'Keells Super • Colombo 03',
+    time: '12m ago',
+    description: '-Rs. 8,450.00 auto-categorized into Groceries.',
+    icon: 'bag-handle-outline',
+    iconBg: '#E0F2FE',
+    iconColor: '#0284C7',
+    isUnread: true,
+  },
+  {
+    id: 'n3',
+    type: 'system',
+    title: 'Central Bank Update',
+    time: '1h ago',
+    description: 'LKR exchange rate policy update reflected.',
+    icon: 'sync-circle-outline',
+    iconBg: '#DCFCE7',
+    iconColor: '#16A34A',
+    isUnread: true,
+  },
+];
+
 export default function DashboardScreen({ navigation }) {
   const { user, logout } = useContext(AuthContext);
   const [summary, setSummary] = useState({
@@ -78,6 +118,12 @@ export default function DashboardScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
   const [activeTab, setActiveTab] = useState('Home');
+
+  // Notification Popup State
+  const [showNotifModal, setShowNotifModal] = useState(false);
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+
+  const unreadCount = notifications.filter((n) => n.isUnread).length;
 
   const fetchData = async () => {
     try {
@@ -121,6 +167,10 @@ export default function DashboardScreen({ navigation }) {
     setRefreshing(false);
   }, []);
 
+  const handleMarkAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
+  };
+
   const formatCurrency = (val) => {
     return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
@@ -154,9 +204,13 @@ export default function DashboardScreen({ navigation }) {
               <Text style={styles.brandTitle}>Expenso</Text>
             </View>
 
-            <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.notificationBtn}
+              activeOpacity={0.8}
+              onPress={() => setShowNotifModal(true)}
+            >
               <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
-              <View style={styles.notifBadgeDot} />
+              {unreadCount > 0 && <View style={styles.notifBadgeDot} />}
             </TouchableOpacity>
           </View>
 
@@ -364,7 +418,6 @@ export default function DashboardScreen({ navigation }) {
 
           {/* Export Monthly Statement Banner */}
           <View style={styles.exportCard}>
-            {/* Background image overlay effect */}
             <LinearGradient
               colors={['#1E293B', '#0F172A']}
               start={{ x: 0, y: 0 }}
@@ -384,7 +437,7 @@ export default function DashboardScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* Floating Bottom Navigation Bar matching mockup */}
+      {/* Floating Bottom Navigation Bar */}
       <View style={styles.bottomNavContainer}>
         <View style={styles.floatingNavBar}>
           <TouchableOpacity
@@ -458,6 +511,97 @@ export default function DashboardScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Notification Popup Badge Modal matching Design Mockup */}
+      <Modal
+        visible={showNotifModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNotifModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.notifOverlay}
+          activeOpacity={1}
+          onPress={() => setShowNotifModal(false)}
+        >
+          {/* Popup Card position anchored below top notification icon */}
+          <View style={styles.notifPopupCard} onStartShouldSetResponder={() => true}>
+            {/* Tooltip Triangle Pointer pointing to Bell Button */}
+            <View style={styles.tooltipPointer} />
+
+            {/* Popup Header */}
+            <View style={styles.notifHeaderRow}>
+              <View style={styles.notifTitleGroup}>
+                <Text style={styles.notifHeaderTitle}>Notifications</Text>
+                {unreadCount > 0 && (
+                  <View style={styles.newBadgePill}>
+                    <Text style={styles.newBadgeText}>{unreadCount} New</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.notifHeaderRight}>
+                <TouchableOpacity onPress={handleMarkAllRead} activeOpacity={0.7}>
+                  <Text style={styles.markAllReadText}>Mark all read</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setShowNotifModal(false)}
+                  style={styles.closeNotifBtn}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="close" size={16} color="#94A3B8" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Notification List Items */}
+            <ScrollView style={styles.notifListScroll} showsVerticalScrollIndicator={false}>
+              {notifications.map((notif) => (
+                <View key={notif.id} style={styles.notifItemRow}>
+                  <View style={[styles.notifIconCircle, { backgroundColor: notif.iconBg }]}>
+                    <Ionicons name={notif.icon} size={18} color={notif.iconColor} />
+                  </View>
+
+                  <View style={styles.notifContentGroup}>
+                    <View style={styles.notifItemHeader}>
+                      <Text style={styles.notifItemTitle}>{notif.title}</Text>
+                      <Text style={styles.notifItemTime}>{notif.time}</Text>
+                    </View>
+
+                    {notif.description && (
+                      <Text style={styles.notifItemDesc}>
+                        {notif.highlight ? (
+                          <>
+                            Dining reached{' '}
+                            <Text style={styles.highlightAmber}>{notif.highlight}</Text>
+                            {notif.description.replace('Dining reached 85%', '')}
+                          </>
+                        ) : (
+                          notif.description
+                        )}
+                      </Text>
+                    )}
+
+                    {/* Action Chips for Smart Budget Alert */}
+                    {notif.hasActions && (
+                      <View style={styles.notifActionRow}>
+                        <TouchableOpacity style={styles.adjustPillBtn} activeOpacity={0.8}>
+                          <Text style={styles.adjustBtnText}>Adjust</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity activeOpacity={0.7}>
+                          <Text style={styles.quickActionText}>Quick action</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -515,11 +659,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 9,
     right: 10,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#FF4D4D',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#2563EB',
   },
 
@@ -932,5 +1076,153 @@ const styles = StyleSheet.create({
   },
   navHomeBadgeActive: {
     backgroundColor: '#2563EB',
+  },
+
+  /* Notification Overlay & Popup Badge */
+  notifOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 20) + 40 : 54,
+    paddingHorizontal: 16,
+    alignItems: 'flex-end',
+  },
+  notifPopupCard: {
+    width: width * 0.9,
+    maxHeight: 460,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 12,
+    position: 'relative',
+  },
+  tooltipPointer: {
+    position: 'absolute',
+    top: -8,
+    right: 22,
+    width: 16,
+    height: 16,
+    backgroundColor: '#FFFFFF',
+    transform: [{ rotate: '45deg' }],
+  },
+  notifHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  notifTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  notifHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginRight: 8,
+  },
+  newBadgePill: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  newBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  notifHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  markAllReadText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  closeNotifBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  /* Notification List Items */
+  notifListScroll: {
+    maxHeight: 360,
+  },
+  notifItemRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  notifIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    marginTop: 2,
+  },
+  notifContentGroup: {
+    flex: 1,
+  },
+  notifItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  notifItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  notifItemTime: {
+    fontSize: 11,
+    color: '#94A3B8',
+  },
+  notifItemDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  highlightAmber: {
+    fontWeight: '700',
+    color: '#D97706',
+  },
+  notifActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 12,
+  },
+  adjustPillBtn: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  adjustBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#D97706',
+  },
+  quickActionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#94A3B8',
   },
 });

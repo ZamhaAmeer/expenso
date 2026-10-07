@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 
-export default function AuthScreen({ route }) {
+export default function AuthScreen({ route, navigation }) {
   const initialIsSignUp = route?.params?.isSignUp ?? false;
   const [isLogin, setIsLogin] = useState(!initialIsSignUp);
   const [name, setName] = useState('');
@@ -310,7 +310,10 @@ export default function AuthScreen({ route }) {
                     <Text style={styles.rememberText}>Remember me</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity activeOpacity={0.7}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => navigation?.navigate('ForgotPassword')}
+                  >
                     <Text style={styles.forgotText}>Forgot password?</Text>
                   </TouchableOpacity>
                 </View>

@@ -14,6 +14,7 @@ import ScanReceiptScreen from '../screens/ScanReceiptScreen';
 import AddExpenseScreen from '../screens/AddExpenseScreen';
 import CalendarScreen from '../screens/CalendarScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -86,11 +87,13 @@ export default function AppNavigator() {
             <Stack.Screen name="ScanReceipt" component={ScanReceiptScreen} />
             <Stack.Screen name="AddExpense" component={AddExpenseScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           </>
         ) : (
           <>
             <Stack.Screen name="GetStarted" component={GetStartedScreen} />
             <Stack.Screen name="Auth" component={AuthScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="Calendar" component={CalendarScreen} />
             <Stack.Screen name="ScanReceipt" component={ScanReceiptScreen} />
             <Stack.Screen name="AddExpense" component={AddExpenseScreen} />
