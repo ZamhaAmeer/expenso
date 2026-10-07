@@ -12,6 +12,7 @@ import {
   ScrollView,
   Platform,
   Image,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,11 +26,12 @@ export default function AuthScreen({ route, navigation }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
-  const [agreeTerms, setAgreeTerms] = useState(true);
+  const [agreeTerms, setAgreeTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   const { login, register } = useContext(AuthContext);
 
@@ -330,8 +332,15 @@ export default function AuthScreen({ route, navigation }) {
                     </View>
                   </TouchableOpacity>
                   <Text style={styles.termsText}>
-                    I agree to the <Text style={styles.termsLink}>Terms of Service</Text> &{' '}
-                    <Text style={styles.termsLink}>Privacy Policy</Text>.
+                    I agree to the{' '}
+                    <Text style={styles.termsLink} onPress={() => setShowPrivacyModal(true)}>
+                      Terms of Service
+                    </Text>{' '}
+                    &{' '}
+                    <Text style={styles.termsLink} onPress={() => setShowPrivacyModal(true)}>
+                      Privacy Policy
+                    </Text>
+                    .
                   </Text>
                 </View>
               )}
@@ -339,12 +348,19 @@ export default function AuthScreen({ route, navigation }) {
               {/* Primary Submit Button */}
               <TouchableOpacity
                 activeOpacity={0.9}
-                style={styles.submitButtonTouch}
+                style={[
+                  styles.submitButtonTouch,
+                  (!isLogin && !agreeTerms) && styles.submitButtonDisabled,
+                ]}
                 onPress={handleSubmit}
-                disabled={loading}
+                disabled={loading || (!isLogin && !agreeTerms)}
               >
                 <LinearGradient
-                  colors={['#2563EB', '#1D4ED8']}
+                  colors={
+                    (!isLogin && !agreeTerms)
+                      ? ['#94A3B8', '#64748B']
+                      : ['#2563EB', '#1D4ED8']
+                  }
                   start={{ x: 0, y: 0.5 }}
                   end={{ x: 1, y: 0.5 }}
                   style={styles.submitButton}
@@ -413,6 +429,105 @@ export default function AuthScreen({ route, navigation }) {
           </View>
         </KeyboardAvoidingView>
       </ScrollView>
+
+      {/* Terms of Service & Privacy Policy Popup Badge Modal */}
+      <Modal
+        visible={showPrivacyModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPrivacyModal(false)}
+      >
+        <View style={styles.policyModalOverlay}>
+          <View style={styles.policyModalSheet}>
+            {/* Grab Bar Indicator */}
+            <View style={styles.policyGrabBar} />
+
+            {/* Close Button Top Right */}
+            <TouchableOpacity
+              style={styles.policyCloseBtn}
+              onPress={() => setShowPrivacyModal(false)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close" size={18} color="#64748B" />
+            </TouchableOpacity>
+
+            {/* Shield Icon Box */}
+            <View style={styles.policyShieldBox}>
+              <Ionicons name="shield-checkmark-outline" size={26} color="#2563EB" />
+            </View>
+
+            {/* Header Titles */}
+            <Text style={styles.policyModalTitle}>Terms & Privacy Policy</Text>
+            <View style={styles.policyBadgePill}>
+              <Ionicons name="lock-closed" size={11} color="#0284C7" style={{ marginRight: 4 }} />
+              <Text style={styles.policyBadgeText}>Bank-Grade 256-Bit AES Encryption</Text>
+            </View>
+
+            {/* Scrollable Policy Content */}
+            <ScrollView style={styles.policyScrollBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.policySection}>
+                <View style={styles.policyHeadingRow}>
+                  <Ionicons name="shield" size={16} color="#2563EB" style={{ marginRight: 6 }} />
+                  <Text style={styles.policySectionHeading}>1. Data Protection & Privacy</Text>
+                </View>
+                <Text style={styles.policySectionText}>
+                  Expenso strictly complies with the Sri Lankan Personal Data Protection Act (PDPA). Your financial records, personal income, and transaction details are processed solely for your personal wealth tracking and are never sold, rented, or shared with third-party advertisers.
+                </Text>
+              </View>
+
+              <View style={styles.policySection}>
+                <View style={styles.policyHeadingRow}>
+                  <Ionicons name="lock-closed" size={16} color="#2563EB" style={{ marginRight: 6 }} />
+                  <Text style={styles.policySectionHeading}>2. Financial Security & Encryption</Text>
+                </View>
+                <Text style={styles.policySectionText}>
+                  All communication between your device and our servers is secured using TLS 1.3 and bank-grade 256-bit AES encryption. Sensitive authentication credentials and biometrics are stored inside secure system hardware keychains.
+                </Text>
+              </View>
+
+              <View style={styles.policySection}>
+                <View style={styles.policyHeadingRow}>
+                  <Ionicons name="hardware-chip" size={16} color="#2563EB" style={{ marginRight: 6 }} />
+                  <Text style={styles.policySectionHeading}>3. AI Optical Scanning & Processing</Text>
+                </View>
+                <Text style={styles.policySectionText}>
+                  Optical receipt scans and AI natural language chat prompts are processed strictly to extract itemized merchant details and auto-categorize your expenses. Raw receipt images are purged automatically after OCR parsing.
+                </Text>
+              </View>
+
+              <View style={styles.policySection}>
+                <View style={styles.policyHeadingRow}>
+                  <Ionicons name="checkmark-circle" size={16} color="#2563EB" style={{ marginRight: 6 }} />
+                  <Text style={styles.policySectionHeading}>4. User Control & Data Rights</Text>
+                </View>
+                <Text style={styles.policySectionText}>
+                  You retain full ownership of your data. You can clear local receipt caches, export monthly statements to Excel/PDF, or request complete account deletion at any time in the Settings menu.
+                </Text>
+              </View>
+            </ScrollView>
+
+            {/* Accept & Agree Button */}
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.policyAgreeBtnTouch}
+              onPress={() => {
+                setAgreeTerms(true);
+                setShowPrivacyModal(false);
+              }}
+            >
+              <LinearGradient
+                colors={['#2563EB', '#1D4ED8']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.policyAgreeBtnGradient}
+              >
+                <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.policyAgreeBtnText}>I Understand & Agree</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -698,6 +813,11 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
+  submitButtonDisabled: {
+    opacity: 0.6,
+    shadowOpacity: 0.05,
+    elevation: 2,
+  },
   submitButton: {
     height: 52,
     borderRadius: 26,
@@ -787,5 +907,126 @@ const styles = StyleSheet.create({
   securityTextFooter: {
     fontSize: 12,
     color: '#94A3B8',
+  },
+
+  /* Privacy Policy Modal Styles */
+  policyModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  policyModalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 32,
+    alignItems: 'center',
+    maxHeight: '82%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 10,
+    position: 'relative',
+  },
+  policyGrabBar: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  policyCloseBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  policyShieldBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  policyModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  policyBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  policyBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  policyScrollBody: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  policySection: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  policyHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  policySectionHeading: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  policySectionText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#475569',
+  },
+  policyAgreeBtnTouch: {
+    width: '100%',
+    borderRadius: 26,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  policyAgreeBtnGradient: {
+    height: 52,
+    borderRadius: 26,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  policyAgreeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

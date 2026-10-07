@@ -57,7 +57,8 @@ export default function GetStartedScreen({ navigation, onGetStarted, onSignIn })
       Animated.delay(300), // Slight pause before text
       Animated.timing(textFade, {
         toValue: 1,
-        duration: 800,
+        duration: 1800, // Luxurious slow transition from left to right
+        easing: Easing.out(Easing.quad),
         useNativeDriver,
       }),
       Animated.delay(300), // Slight pause before button
@@ -100,6 +101,39 @@ export default function GetStartedScreen({ navigation, onGetStarted, onSignIn })
   const spin = orbitSpin.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
+  });
+
+  // Staggered Letter-by-Letter reveal interpolations for "Expenso" (7 letters)
+  const appTitleLetters = ['E', 'x', 'p', 'e', 'n', 's', 'o'];
+  const totalLetters = appTitleLetters.length;
+
+  const letterInterpolations = appTitleLetters.map((_, i) => {
+    const start = (i / totalLetters) * 0.65;
+    const end = Math.min(1, start + 0.25);
+    return {
+      opacity: textFade.interpolate({
+        inputRange: [start, end],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      }),
+      translateX: textFade.interpolate({
+        inputRange: [start, end],
+        outputRange: [-40, 0],
+        extrapolate: 'clamp',
+      }),
+    };
+  });
+
+  // Subtext entrance interpolation following letter reveal
+  const subtitleOpacity = textFade.interpolate({
+    inputRange: [0.55, 1],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const subtitleTranslateX = textFade.interpolate({
+    inputRange: [0.55, 1],
+    outputRange: [-60, 0],
+    extrapolate: 'clamp',
   });
 
   const handlePressIn = () => {
@@ -241,13 +275,39 @@ export default function GetStartedScreen({ navigation, onGetStarted, onSignIn })
             </Animated.View>
           </Animated.View>
 
-          {/* TEXT SECTION: App Title & Subtitle */}
-          <Animated.View style={[styles.textSection, { opacity: textFade }]}>
-            <Text style={styles.appTitle}>Expenso</Text>
-            <Text style={styles.appSubtitle}>
+          {/* TEXT SECTION: Letter-by-Letter Staggered Reveal Animation */}
+          <View style={styles.textSection}>
+            {/* "Expenso" Title - Letter by Letter */}
+            <View style={styles.titleRow}>
+              {appTitleLetters.map((char, index) => (
+                <Animated.Text
+                  key={index}
+                  style={[
+                    styles.appTitleLetter,
+                    {
+                      opacity: letterInterpolations[index].opacity,
+                      transform: [{ translateX: letterInterpolations[index].translateX }],
+                    },
+                  ]}
+                >
+                  {char}
+                </Animated.Text>
+              ))}
+            </View>
+
+            {/* Subtitle Line */}
+            <Animated.Text
+              style={[
+                styles.appSubtitle,
+                {
+                  opacity: subtitleOpacity,
+                  transform: [{ translateX: subtitleTranslateX }],
+                },
+              ]}
+            >
               Intelligent wealth tracking & expense intelligence in Sri Lankan Rupees.
-            </Text>
-          </Animated.View>
+            </Animated.Text>
+          </View>
 
           {/* ACTION SECTION: Button & Sign In Link */}
           <Animated.View style={[styles.actionSection, { opacity: buttonFade }]}>
@@ -373,7 +433,13 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 12,
   },
-  appTitle: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  appTitleLetter: {
     fontSize: 38,
     fontWeight: '900',
     fontFamily: Platform.select({
@@ -382,8 +448,6 @@ const styles = StyleSheet.create({
       web: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     }),
     color: '#FFFFFF',
-    letterSpacing: -0.6,
-    marginBottom: 8,
     textShadowColor: 'rgba(0, 0, 0, 0.6)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
