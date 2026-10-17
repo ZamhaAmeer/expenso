@@ -26,7 +26,15 @@ const transactionSchema = new mongoose.Schema(
       required: [true, 'Category is required'],
       default: 'General',
     },
+    paymentMethod: {
+      type: String,
+      default: 'Commercial Bank',
+    },
     merchant: {
+      type: String,
+      default: '',
+    },
+    notes: {
       type: String,
       default: '',
     },

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import api from '../services/api';
+import transactionService from '../services/transactionService';
 
 const { width } = Dimensions.get('window');
 
@@ -54,36 +54,40 @@ export default function AddExpenseScreen({ navigation, route }) {
   const handleSave = async () => {
     const rawVal = parseFloat(amount.replace(/,/g, '')) || 0;
     if (rawVal <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid expense amount.');
+      Alert.alert('Invalid Amount', 'Please enter a valid amount greater than zero.');
       return;
     }
 
     try {
       setLoading(true);
-      await api.post('/transactions', {
-        title: merchant.trim() || 'Manual Expense',
+      await transactionService.createTransaction({
+        title: merchant.trim() || `${selectedCategory} ${transactionType}`,
         amount: rawVal,
         type: transactionType.toLowerCase(),
         category: selectedCategory,
         paymentMethod: paidFrom,
+        merchant: merchant.trim(),
+        notes: notes.trim(),
         date: new Date().toISOString(),
         entryMethod: 'manual',
       });
 
-      Alert.alert('Expense Saved! 🎉', `Rs. ${amount} saved successfully under ${selectedCategory}.`, [
+      Alert.alert('Transaction Saved! 🎉', `Rs. ${amount} saved successfully under ${selectedCategory}.`, [
         {
-          text: 'View Dashboard',
+          text: 'Transactions',
+          onPress: () => navigation?.navigate('Transactions'),
+        },
+        {
+          text: 'Dashboard',
           onPress: () => navigation?.navigate('Dashboard'),
         },
       ]);
     } catch (err) {
-      // Fallback response for offline / mock testing
-      Alert.alert('Expense Saved! 🎉', `Rs. ${amount} saved successfully under ${selectedCategory}.`, [
-        {
-          text: 'View Dashboard',
-          onPress: () => navigation?.navigate('Dashboard'),
-        },
-      ]);
+      const msg =
+        err.response?.data?.message ||
+        err.message ||
+        'Could not save transaction. Please check your backend connection.';
+      Alert.alert('Save Failed', msg);
     } finally {
       setLoading(false);
     }

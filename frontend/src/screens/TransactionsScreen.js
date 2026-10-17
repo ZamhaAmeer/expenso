@@ -11,10 +11,14 @@ import {
   RefreshControl,
   Dimensions,
   Platform,
+  Modal,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import api from '../services/api';
+import { useFocusEffect } from '@react-navigation/native';
+import transactionService from '../services/transactionService';
 
 const { width } = Dimensions.get('window');
 
@@ -174,60 +178,176 @@ const DEFAULT_GROUPS = [
 
 export default function TransactionsScreen({ navigation }) {
   const [groupedTx, setGroupedTx] = useState(DEFAULT_GROUPS);
+  const [summary, setSummary] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All'); // 'All', 'Expenses', 'Income', 'Needs Review'
   const [refreshing, setRefreshing] = useState(false);
   const [activeNavTab, setActiveNavTab] = useState('History');
 
+  // Detail Modal & Delete States
+  const [selectedTx, setSelectedTx] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const fetchTransactions = async () => {
     try {
-      const res = await api.get('/transactions');
-      if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-        // Group transactions dynamically if API returns list
-        const todayItems = [];
-        res.data.forEach((tx, idx) => {
-          todayItems.push({
-            id: tx._id || `api-${idx}`,
+      const [txList, summaryData] = await Promise.all([
+        transactionService.getTransactions().catch(() => null),
+        transactionService.getSummary().catch(() => null),
+      ]);
+
+      if (summaryData) {
+        setSummary(summaryData);
+      }
+
+      if (txList && Array.isArray(txList) && txList.length > 0) {
+        const groupsMap = {};
+
+        txList.forEach((tx) => {
+          const txDate = tx.date ? new Date(tx.date) : new Date();
+          const today = new Date();
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+
+          let dateKey = txDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          if (txDate.toDateString() === today.toDateString()) {
+            dateKey = `Today, ${dateKey}`;
+          } else if (txDate.toDateString() === yesterday.toDateString()) {
+            dateKey = `Yesterday, ${dateKey}`;
+          }
+
+          if (!groupsMap[dateKey]) {
+            groupsMap[dateKey] = {
+              dateGroup: dateKey,
+              totalSpend: 0,
+              totalIncome: 0,
+              items: [],
+            };
+          }
+
+          const isIncome = tx.type === 'income';
+          const numAmt = Number(tx.amount || 0);
+          if (isIncome) {
+            groupsMap[dateKey].totalIncome += numAmt;
+          } else {
+            groupsMap[dateKey].totalSpend += numAmt;
+          }
+
+          // Category icon and color mapping
+          const cat = (tx.category || 'General').toLowerCase();
+          let icon = 'cart-outline';
+          let iconBg = '#DCFCE7';
+          let iconColor = '#16A34A';
+
+          if (isIncome) {
+            icon = 'wallet-outline';
+            iconBg = '#DCFCE7';
+            iconColor = '#16A34A';
+          } else if (cat.includes('food') || cat.includes('dining')) {
+            icon = 'restaurant-outline';
+            iconBg = '#FFEDD5';
+            iconColor = '#EA580C';
+          } else if (cat.includes('travel') || cat.includes('transport')) {
+            icon = 'car-outline';
+            iconBg = '#FEF3C7';
+            iconColor = '#D97706';
+          } else if (cat.includes('shop')) {
+            icon = 'bag-handle-outline';
+            iconBg = '#E0F2FE';
+            iconColor = '#0284C7';
+          } else if (cat.includes('bill') || cat.includes('utility')) {
+            icon = 'receipt-outline';
+            iconBg = '#F3E8FF';
+            iconColor = '#9333EA';
+          } else if (cat.includes('health')) {
+            icon = 'medical-outline';
+            iconBg = '#FEE2E2';
+            iconColor = '#DC2626';
+          }
+
+          groupsMap[dateKey].items.push({
+            id: tx._id,
+            rawTx: tx,
             title: tx.title || 'Transaction',
-            amount: `${tx.type === 'income' ? '+' : '-'}Rs. ${Number(tx.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+            amount: `${isIncome ? '+' : '-'}Rs. ${numAmt.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
             type: tx.type || 'expense',
-            timeDate: new Date(tx.date || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timeDate: txDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             categoryTag: tx.category || 'General',
-            tagBg: tx.type === 'income' ? '#DCFCE7' : '#E0F2FE',
-            tagColor: tx.type === 'income' ? '#16A34A' : '#0284C7',
+            tagBg: isIncome ? '#DCFCE7' : '#E0F2FE',
+            tagColor: isIncome ? '#16A34A' : '#0284C7',
             paymentMethod: tx.paymentMethod || 'Commercial Bank',
             methodIcon: 'card-outline',
-            icon: tx.type === 'income' ? 'wallet-outline' : 'cart-outline',
-            iconBg: tx.type === 'income' ? '#DCFCE7' : '#E0F2FE',
-            iconColor: tx.type === 'income' ? '#16A34A' : '#0284C7',
-            needsReview: false,
+            icon,
+            iconBg,
+            iconColor,
+            needsReview: tx.isReviewed === false,
           });
         });
 
-        setGroupedTx([
-          {
-            dateGroup: 'Recent Activity',
-            metaSummary: `${todayItems.length} Logged Items`,
-            metaColor: '#64748B',
-            items: todayItems,
-          },
-          ...DEFAULT_GROUPS.slice(1),
-        ]);
+        const formattedGroups = Object.values(groupsMap).map((grp) => {
+          let metaSummary = `${grp.items.length} Transactions`;
+          let metaColor = '#64748B';
+          if (grp.totalIncome > 0 && grp.totalSpend === 0) {
+            metaSummary = `Income: +Rs. ${grp.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+            metaColor = '#16A34A';
+          } else if (grp.totalSpend > 0) {
+            metaSummary = `Spent: Rs. ${grp.totalSpend.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+            metaColor = '#64748B';
+          }
+          return {
+            dateGroup: grp.dateGroup,
+            metaSummary,
+            metaColor,
+            items: grp.items,
+          };
+        });
+
+        setGroupedTx(formattedGroups);
       }
     } catch (err) {
       console.log('Using initial transactions design dataset:', err.message);
     }
   };
 
-  useEffect(() => {
-    fetchTransactions();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchTransactions();
+    }, [])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchTransactions();
     setRefreshing(false);
   }, []);
+
+  const handleDeleteTransaction = (id) => {
+    Alert.alert(
+      'Delete Transaction',
+      'Are you sure you want to delete this transaction record?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              await transactionService.deleteTransaction(id);
+              setShowDetailModal(false);
+              setSelectedTx(null);
+              await fetchTransactions();
+              Alert.alert('Deleted', 'Transaction removed successfully.');
+            } catch (err) {
+              Alert.alert('Error', err.response?.data?.message || 'Could not delete transaction.');
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Filter transactions based on query & active tab
   const getFilteredGroups = () => {
@@ -296,8 +416,16 @@ export default function TransactionsScreen({ navigation }) {
 
             <View style={styles.spendAmountRow}>
               <Text style={styles.currencyPrefix}>Rs. </Text>
-              <Text style={styles.spendMainText}>184,320</Text>
-              <Text style={styles.currencySuffix}>.50</Text>
+              <Text style={styles.spendMainText}>
+                {summary && summary.totalExpense !== undefined
+                  ? Number(summary.totalExpense).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).split('.')[0]
+                  : '184,320'}
+              </Text>
+              <Text style={styles.currencySuffix}>
+                .{summary && summary.totalExpense !== undefined
+                  ? (Number(summary.totalExpense).toFixed(2).split('.')[1] || '00')
+                  : '50'}
+              </Text>
             </View>
 
             <View style={styles.subPill}>
@@ -447,7 +575,14 @@ export default function TransactionsScreen({ navigation }) {
                 <View style={styles.groupCardWrapper}>
                   {group.items.map((item, itemIdx) => (
                     <View key={item.id}>
-                      <View style={styles.txRowCard}>
+                      <TouchableOpacity
+                        style={styles.txRowCard}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          setSelectedTx(item);
+                          setShowDetailModal(true);
+                        }}
+                      >
                         {/* Circle Icon */}
                         <View style={[styles.txIconCircle, { backgroundColor: item.iconBg }]}>
                           <Ionicons name={item.icon} size={20} color={item.iconColor} />
@@ -488,7 +623,7 @@ export default function TransactionsScreen({ navigation }) {
                             <Text style={styles.txTimeText}>{item.timeDate}</Text>
                           )}
                         </View>
-                      </View>
+                      </TouchableOpacity>
 
                       {/* Divider line between items inside group */}
                       {itemIdx < group.items.length - 1 && <View style={styles.itemDivider} />}
@@ -556,6 +691,113 @@ export default function TransactionsScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Transaction Detail & Actions Bottom Sheet Modal */}
+      <Modal
+        visible={showDetailModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDetailModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalGrabBar} />
+
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => setShowDetailModal(false)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close" size={18} color="#64748B" />
+            </TouchableOpacity>
+
+            {selectedTx && (
+              <>
+                <View style={[styles.detailIconBox, { backgroundColor: selectedTx.iconBg }]}>
+                  <Ionicons name={selectedTx.icon} size={28} color={selectedTx.iconColor} />
+                </View>
+
+                <Text style={styles.detailTitle}>{selectedTx.title}</Text>
+                <Text
+                  style={[
+                    styles.detailAmount,
+                    selectedTx.type === 'income' ? styles.txIncomeText : styles.txExpenseText,
+                  ]}
+                >
+                  {selectedTx.amount}
+                </Text>
+
+                <View style={styles.detailMetaCard}>
+                  <View style={styles.detailMetaRow}>
+                    <Text style={styles.detailMetaLabel}>Transaction Type</Text>
+                    <Text style={[styles.detailMetaValue, { textTransform: 'capitalize' }]}>
+                      {selectedTx.type}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailMetaRow}>
+                    <Text style={styles.detailMetaLabel}>Category</Text>
+                    <View style={[styles.categoryTag, { backgroundColor: selectedTx.tagBg }]}>
+                      <Text style={[styles.categoryTagText, { color: selectedTx.tagColor }]}>
+                        {selectedTx.categoryTag}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailMetaRow}>
+                    <Text style={styles.detailMetaLabel}>Payment Method</Text>
+                    <Text style={styles.detailMetaValue}>{selectedTx.paymentMethod}</Text>
+                  </View>
+
+                  <View style={styles.detailMetaRow}>
+                    <Text style={styles.detailMetaLabel}>Timestamp</Text>
+                    <Text style={styles.detailMetaValue}>{selectedTx.timeDate}</Text>
+                  </View>
+
+                  {selectedTx.rawTx?.notes ? (
+                    <View style={styles.detailMetaRow}>
+                      <Text style={styles.detailMetaLabel}>Notes</Text>
+                      <Text style={styles.detailMetaValue}>{selectedTx.rawTx.notes}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {selectedTx.id && !selectedTx.id.startsWith('tx-') ? (
+                  <TouchableOpacity
+                    style={styles.deleteBtnTouch}
+                    activeOpacity={0.85}
+                    onPress={() => handleDeleteTransaction(selectedTx.id)}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <ActivityIndicator color="#EF4444" />
+                    ) : (
+                      <>
+                        <Ionicons name="trash-outline" size={18} color="#EF4444" style={{ marginRight: 6 }} />
+                        <Text style={styles.deleteBtnText}>Delete Transaction</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.deleteBtnTouch}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setShowDetailModal(false);
+                      Alert.alert(
+                        'Sample Design Item',
+                        'This is a preloaded sample transaction. Use the "Expense" button to create live transactions in your MongoDB database!'
+                      );
+                    }}
+                  >
+                    <Text style={styles.demoDismissBtnText}>Close Preview</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1020,5 +1262,116 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 6,
+  },
+
+  /* Transaction Detail Modal Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 36,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 10,
+    position: 'relative',
+  },
+  modalGrabBar: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  modalCloseBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  detailTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  detailAmount: {
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 20,
+  },
+  txExpenseText: {
+    color: '#0F172A',
+  },
+  detailMetaCard: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  detailMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  detailMetaLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  detailMetaValue: {
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: '700',
+  },
+  deleteBtnTouch: {
+    width: '100%',
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteBtnText: {
+    color: '#DC2626',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  demoDismissBtnText: {
+    color: '#64748B',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
