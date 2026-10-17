@@ -54,15 +54,33 @@ exports.getTransactionSummary = async (req, res) => {
 // @route POST /api/transactions
 exports.createTransaction = async (req, res) => {
   try {
-    const { title, amount, type, category, merchant, date, entryMethod, rawInput, isReviewed } = req.body;
+    const {
+      title,
+      amount,
+      type,
+      category,
+      paymentMethod,
+      merchant,
+      notes,
+      date,
+      entryMethod,
+      rawInput,
+      isReviewed,
+    } = req.body;
+
+    if (!title || amount === undefined || amount === null) {
+      return res.status(400).json({ message: 'Title and amount are required fields.' });
+    }
 
     const transaction = await Transaction.create({
       user: req.user.id,
-      title,
-      amount,
+      title: title.trim(),
+      amount: Number(amount),
       type: type || 'expense',
       category: category || 'General',
+      paymentMethod: paymentMethod || 'Commercial Bank',
       merchant: merchant || '',
+      notes: notes || '',
       date: date || new Date(),
       entryMethod: entryMethod || 'manual',
       rawInput: rawInput || '',
@@ -70,6 +88,32 @@ exports.createTransaction = async (req, res) => {
     });
 
     res.status(201).json(transaction);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc Update a transaction
+// @route PUT /api/transactions/:id
+exports.updateTransaction = async (req, res) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id);
+
+    if (!transaction) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    if (transaction.user.toString() !== req.user.id) {
+      return res.status(401).json({ message: 'User not authorized to update this transaction' });
+    }
+
+    const updated = await Transaction.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+
+    res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -90,7 +134,7 @@ exports.deleteTransaction = async (req, res) => {
     }
 
     await transaction.deleteOne();
-    res.json({ message: 'Transaction removed' });
+    res.json({ message: 'Transaction removed successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
