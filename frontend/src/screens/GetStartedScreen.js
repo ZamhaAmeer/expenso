@@ -156,7 +156,7 @@ export default function GetStartedScreen({ navigation, onGetStarted, onSignIn })
     if (onGetStarted) {
       onGetStarted();
     } else if (navigation) {
-      navigation.navigate('Auth', { isSignUp: false });
+      navigation.navigate('Auth', { isSignUp: true });
     }
   };
 

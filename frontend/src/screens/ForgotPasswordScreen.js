@@ -13,25 +13,40 @@ import {
   Image,
   Modal,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import api from '../services/api';
 
 export default function ForgotPasswordScreen({ navigation }) {
   const [emailOrMobile, setEmailOrMobile] = useState('dilshan.perera@colombo.lk');
   const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [modalStep, setModalStep] = useState('otp'); // 'otp' | 'newPassword'
+
+  // Loading States
+  const [isRequestingCode, setIsRequestingCode] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [modalError, setModalError] = useState('');
 
   // 6-Digit OTP State
-  const [otp, setOtp] = useState(['5', '8', '2', '', '', '']);
-  const [activeOtpIndex, setActiveOtpIndex] = useState(3);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [activeOtpIndex, setActiveOtpIndex] = useState(0);
   const inputRefs = useRef([]);
 
-  // Countdown timer state (starting at 48s)
-  const [timerSeconds, setTimerSeconds] = useState(48);
+  // New Password State
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+
+  // Countdown timer state
+  const [timerSeconds, setTimerSeconds] = useState(60);
 
   useEffect(() => {
     let interval = null;
-    if (showVerifyModal && timerSeconds > 0) {
+    if (showVerifyModal && modalStep === 'otp' && timerSeconds > 0) {
       interval = setInterval(() => {
         setTimerSeconds((prev) => prev - 1);
       }, 1000);
@@ -39,14 +54,43 @@ export default function ForgotPasswordScreen({ navigation }) {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [showVerifyModal, timerSeconds]);
+  }, [showVerifyModal, modalStep, timerSeconds]);
 
-  const handleSendRecoveryCode = () => {
-    setShowVerifyModal(true);
-    setTimerSeconds(48);
+  const handleSendRecoveryCode = async () => {
+    const target = emailOrMobile.trim();
+    if (!target) {
+      Alert.alert('Required Field', 'Please enter your registered email address or mobile number.');
+      return;
+    }
+
+    try {
+      setIsRequestingCode(true);
+      setModalError('');
+      const res = await api.post('/auth/forgot-password', { emailOrMobile: target });
+
+      // If backend returned dev OTP, populate for instant ease of testing
+      const receivedOtp = res.data?.otp;
+      if (receivedOtp && receivedOtp.length === 6) {
+        setOtp(receivedOtp.split(''));
+        setActiveOtpIndex(5);
+      } else {
+        setOtp(['', '', '', '', '', '']);
+        setActiveOtpIndex(0);
+      }
+
+      setTimerSeconds(60);
+      setModalStep('otp');
+      setShowVerifyModal(true);
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Could not send recovery code. Please check your backend connection.';
+      Alert.alert('Request Failed', msg);
+    } finally {
+      setIsRequestingCode(false);
+    }
   };
 
   const handleOtpChange = (text, index) => {
+    setModalError('');
     const newOtp = [...otp];
     newOtp[index] = text;
     setOtp(newOtp);
@@ -65,36 +109,89 @@ export default function ForgotPasswordScreen({ navigation }) {
     }
   };
 
-  const handleResendCode = () => {
-    setTimerSeconds(48);
-    setOtp(['5', '8', '2', '', '', '']);
-    setActiveOtpIndex(3);
-    Alert.alert('Code Resent 📩', 'A new 6-digit OTP code has been dispatched to your email.');
+  const handleResendCode = async () => {
+    try {
+      setModalError('');
+      const res = await api.post('/auth/forgot-password', { emailOrMobile: emailOrMobile.trim() });
+      const receivedOtp = res.data?.otp;
+      if (receivedOtp && receivedOtp.length === 6) {
+        setOtp(receivedOtp.split(''));
+        setActiveOtpIndex(5);
+      }
+      setTimerSeconds(60);
+      Alert.alert('Code Resent 📩', 'A new 6-digit verification code has been dispatched.');
+    } catch (err) {
+      setModalError(err.response?.data?.message || 'Could not resend code. Please try again.');
+    }
   };
 
-  const handleVerifyAndProceed = () => {
-    const fullCode = otp.join('');
-    setShowVerifyModal(false);
-    Alert.alert(
-      'Email Verified! 🎉',
-      'Your identity has been verified. You may now create a new password.',
-      [
-        {
-          text: 'Proceed to Sign In',
-          onPress: () => navigation?.navigate('Auth'),
-        },
-      ]
-    );
+  const handleVerifyAndProceed = async () => {
+    const fullCode = otp.join('').trim();
+    if (fullCode.length !== 6) {
+      setModalError('Please enter all 6 digits of the OTP code.');
+      return;
+    }
+
+    try {
+      setIsVerifyingOtp(true);
+      setModalError('');
+      await api.post('/auth/verify-otp', {
+        emailOrMobile: emailOrMobile.trim(),
+        otp: fullCode,
+      });
+
+      // Move to Step 2: Set New Password
+      setModalStep('newPassword');
+    } catch (err) {
+      setModalError(err.response?.data?.message || 'Invalid or expired OTP code. Please check and try again.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const handleResetPasswordSubmit = async () => {
+    setModalError('');
+    if (!newPassword || newPassword.length < 6) {
+      setModalError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setModalError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    try {
+      setIsResettingPassword(true);
+      const res = await api.post('/auth/reset-password', {
+        emailOrMobile: emailOrMobile.trim(),
+        otp: otp.join('').trim(),
+        newPassword,
+      });
+
+      setShowVerifyModal(false);
+      Alert.alert(
+        'Password Reset! 🎉',
+        res.data?.message || 'Your password has been reset successfully. Please sign in with your new credentials.',
+        [
+          {
+            text: 'Sign In Now',
+            onPress: () => navigation?.navigate('Auth', { isSignUp: false }),
+          },
+        ]
+      );
+    } catch (err) {
+      setModalError(err.response?.data?.message || 'Failed to reset password. Please try again.');
+    } finally {
+      setIsResettingPassword(false);
+    }
   };
 
   const handleWhatsAppOTP = () => {
-    setShowVerifyModal(true);
-    setTimerSeconds(48);
+    handleSendRecoveryCode();
   };
 
   const handleSMSOTP = () => {
-    setShowVerifyModal(true);
-    setTimerSeconds(48);
+    handleSendRecoveryCode();
   };
 
   const formatTimer = (totalSec) => {
@@ -194,13 +291,12 @@ export default function ForgotPasswordScreen({ navigation }) {
                     We'll send a 6-digit verification code to verify your identity.
                   </Text>
                 </View>
-              </View>
-
-              {/* Primary Submit Button */}
+              </V              {/* Primary Submit Button */}
               <TouchableOpacity
                 activeOpacity={0.9}
                 style={styles.submitButtonTouch}
                 onPress={handleSendRecoveryCode}
+                disabled={isRequestingCode}
               >
                 <LinearGradient
                   colors={['#2563EB', '#1D4ED8']}
@@ -208,8 +304,14 @@ export default function ForgotPasswordScreen({ navigation }) {
                   end={{ x: 1, y: 0.5 }}
                   style={styles.submitButton}
                 >
-                  <Text style={styles.submitButtonText}>Send Recovery Code</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={styles.submitArrow} />
+                  {isRequestingCode ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Text style={styles.submitButtonText}>Send Recovery Code</Text>
+                      <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={styles.submitArrow} />
+                    </>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
 
@@ -226,6 +328,7 @@ export default function ForgotPasswordScreen({ navigation }) {
                   activeOpacity={0.8}
                   style={styles.altButton}
                   onPress={handleWhatsAppOTP}
+                  disabled={isRequestingCode}
                 >
                   <Ionicons name="logo-whatsapp" size={18} color="#25D366" style={styles.altIcon} />
                   <Text style={styles.altText}>WhatsApp OTP</Text>
@@ -235,6 +338,7 @@ export default function ForgotPasswordScreen({ navigation }) {
                   activeOpacity={0.8}
                   style={styles.altButton}
                   onPress={handleSMSOTP}
+                  disabled={isRequestingCode}
                 >
                   <Ionicons name="chatbubble-ellipses-outline" size={18} color="#0F172A" style={styles.altIcon} />
                   <Text style={styles.altText}>SMS (+94)</Text>
@@ -245,7 +349,7 @@ export default function ForgotPasswordScreen({ navigation }) {
             {/* Remember Password Link Below Card */}
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() => navigation?.navigate('Auth')}
+              onPress={() => navigation?.navigate('Auth', { isSignUp: false })}
               style={styles.footerLinkTouch}
             >
               <Text style={styles.footerLinkText}>
@@ -257,7 +361,7 @@ export default function ForgotPasswordScreen({ navigation }) {
         </KeyboardAvoidingView>
       </ScrollView>
 
-      {/* Email Verification OTP Popup Badge Modal */}
+      {/* Email Verification OTP & Password Reset Bottom Sheet Modal */}
       <Modal
         visible={showVerifyModal}
         transparent
@@ -282,82 +386,196 @@ export default function ForgotPasswordScreen({ navigation }) {
                 <Ionicons name="close" size={18} color="#64748B" />
               </TouchableOpacity>
 
-              {/* Mail Icon Circle */}
-              <View style={styles.mailIconBox}>
-                <Ionicons name="mail-outline" size={24} color="#2563EB" />
-              </View>
+              {modalStep === 'otp' ? (
+                <>
+                  {/* Mail Icon Circle */}
+                  <View style={styles.mailIconBox}>
+                    <Ionicons name="mail-outline" size={24} color="#2563EB" />
+                  </View>
 
-              {/* Modal Title & Subtitle */}
-              <Text style={styles.modalTitle}>Verify your Email</Text>
-              <Text style={styles.modalSubtitle}>
-                We've sent a 6-digit verification OTP to{' '}
-                <Text style={styles.modalSubtitleEmail}>{emailOrMobile || 'dilshan.perera@colombo.lk'}</Text>
-              </Text>
-
-              {/* 6-Digit OTP Box Grid */}
-              <View style={styles.otpGridRow}>
-                {Array.from({ length: 6 }).map((_, idx) => {
-                  const isFilled = Boolean(otp[idx]);
-                  const isFocused = activeOtpIndex === idx;
-
-                  return (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.otpBox,
-                        isFilled && styles.otpBoxFilled,
-                        isFocused && styles.otpBoxFocused,
-                      ]}
-                    >
-                      <TextInput
-                        ref={(ref) => (inputRefs.current[idx] = ref)}
-                        style={styles.otpInputText}
-                        maxLength={1}
-                        keyboardType="number-pad"
-                        value={otp[idx]}
-                        onChangeText={(t) => handleOtpChange(t, idx)}
-                        onKeyPress={(e) => handleOtpKeyPress(e, idx)}
-                        onFocus={() => setActiveOtpIndex(idx)}
-                      />
-                      {/* Active Cursor Indicator */}
-                      {isFocused && !isFilled && (
-                        <View style={styles.cursorBar} />
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-
-              {/* Resend Timer Text */}
-              <View style={styles.timerRow}>
-                <Text style={styles.timerBaseText}>Didn't receive code? </Text>
-                {timerSeconds > 0 ? (
-                  <Text style={styles.timerHighlightText}>
-                    Resend in {formatTimer(timerSeconds)}
+                  {/* Modal Title & Subtitle */}
+                  <Text style={styles.modalTitle}>Verify your Email</Text>
+                  <Text style={styles.modalSubtitle}>
+                    We've sent a 6-digit verification OTP to{' '}
+                    <Text style={styles.modalSubtitleEmail}>{emailOrMobile || 'dilshan.perera@colombo.lk'}</Text>
                   </Text>
-                ) : (
-                  <TouchableOpacity onPress={handleResendCode} activeOpacity={0.7}>
-                    <Text style={styles.resendActiveText}>Resend Now</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
 
-              {/* Verify & Proceed Button */}
-              <TouchableOpacity
-                activeOpacity={0.9}
-                style={styles.verifyBtnTouch}
-                onPress={handleVerifyAndProceed}
-              >
-                <LinearGradient
-                  colors={['#2563EB', '#1D4ED8']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={styles.verifyBtnGradient}
-                >
-                  <Text style={styles.verifyBtnText}>Verify & Proceed</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
-                </LinearGradient>
-              </TouchableOpacity>
+                  {modalError ? (
+                    <View style={styles.modalErrorBanner}>
+                      <Ionicons name="alert-circle" size={16} color="#DC2626" style={{ marginRight: 6 }} />
+                      <Text style={styles.modalErrorText}>{modalError}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* 6-Digit OTP Box Grid */}
+                  <View style={styles.otpGridRow}>
+                    {Array.from({ length: 6 }).map((_, idx) => {
+                      const isFilled = Boolean(otp[idx]);
+                      const isFocused = activeOtpIndex === idx;
+
+                      return (
+                        <View
+                          key={idx}
+                          style={[
+                            styles.otpBox,
+                            isFilled && styles.otpBoxFilled,
+                            isFocused && styles.otpBoxFocused,
+                          ]}
+                        >
+                          <TextInput
+                            ref={(ref) => (inputRefs.current[idx] = ref)}
+                            style={styles.otpInputText}
+                            maxLength={1}
+                            keyboardType="number-pad"
+                            value={otp[idx]}
+                            onChangeText={(t) => handleOtpChange(t, idx)}
+                            onKeyPress={(e) => handleOtpKeyPress(e, idx)}
+                            onFocus={() => setActiveOtpIndex(idx)}
+                          />
+                          {/* Active Cursor Indicator */}
+                          {isFocused && !isFilled && (
+                            <View style={styles.cursorBar} />
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  {/* Resend Timer Text */}
+                  <View style={styles.timerRow}>
+                    <Text style={styles.timerBaseText}>Didn't receive code? </Text>
+                    {timerSeconds > 0 ? (
+                      <Text style={styles.timerHighlightText}>
+                        Resend in {formatTimer(timerSeconds)}
+                      </Text>
+                    ) : (
+                      <TouchableOpacity onPress={handleResendCode} activeOpacity={0.7}>
+                        <Text style={styles.resendActiveText}>Resend Now</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Verify & Proceed Button */}
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    style={styles.verifyBtnTouch}
+                    onPress={handleVerifyAndProceed}
+                    disabled={isVerifyingOtp}
+                  >
+                    <LinearGradient
+                      colors={['#2563EB', '#1D4ED8']}
+                      start={{ x: 0, y: 0.5 }}
+                      end={{ x: 1, y: 0.5 }}
+                      style={styles.verifyBtnGradient}
+                    >
+                      {isVerifyingOtp ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Text style={styles.verifyBtnText}>Verify & Proceed</Text>
+                          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {/* Shield / Key Icon Circle */}
+                  <View style={styles.keyIconBox}>
+                    <Ionicons name="shield-checkmark" size={26} color="#16A34A" />
+                  </View>
+
+                  {/* Modal Title & Subtitle */}
+                  <Text style={styles.modalTitle}>Set New Password</Text>
+                  <Text style={styles.modalSubtitle}>
+                    Choose a new secure password to protect your Expenso account.
+                  </Text>
+
+                  {modalError ? (
+                    <View style={styles.modalErrorBanner}>
+                      <Ionicons name="alert-circle" size={16} color="#DC2626" style={{ marginRight: 6 }} />
+                      <Text style={styles.modalErrorText}>{modalError}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* New Password Input */}
+                  <View style={[styles.inputGroup, { width: '100%', marginBottom: 14 }]}>
+                    <Text style={styles.label}>New Password</Text>
+                    <View style={styles.inputWrapper}>
+                      <Ionicons name="lock-closed-outline" size={18} color="#64748B" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="At least 6 characters"
+                        placeholderTextColor="#94A3B8"
+                        secureTextEntry={!showNewPassword}
+                        value={newPassword}
+                        onChangeText={(t) => {
+                          setModalError('');
+                          setNewPassword(t);
+                        }}
+                      />
+                      <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
+                        <Ionicons
+                          name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
+                          size={18}
+                          color="#64748B"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Confirm Password Input */}
+                  <View style={[styles.inputGroup, { width: '100%', marginBottom: 20 }]}>
+                    <Text style={styles.label}>Confirm New Password</Text>
+                    <View style={styles.inputWrapper}>
+                      <Ionicons name="refresh-outline" size={18} color="#64748B" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Re-enter your new password"
+                        placeholderTextColor="#94A3B8"
+                        secureTextEntry={!showConfirmNewPassword}
+                        value={confirmNewPassword}
+                        onChangeText={(t) => {
+                          setModalError('');
+                          setConfirmNewPassword(t);
+                        }}
+                      />
+                      <TouchableOpacity onPress={() => setShowConfirmNewPassword(!showConfirmNewPassword)}>
+                        <Ionicons
+                          name={showConfirmNewPassword ? 'eye-off-outline' : 'eye-outline'}
+                          size={18}
+                          color="#64748B"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Reset Password & Sign In Button */}
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    style={styles.verifyBtnTouch}
+                    onPress={handleResetPasswordSubmit}
+                    disabled={isResettingPassword}
+                  >
+                    <LinearGradient
+                      colors={['#16A34A', '#15803D']}
+                      start={{ x: 0, y: 0.5 }}
+                      end={{ x: 1, y: 0.5 }}
+                      style={styles.verifyBtnGradient}
+                    >
+                      {isResettingPassword ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                          <Text style={styles.verifyBtnText}>Reset Password & Sign In</Text>
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </KeyboardAvoidingView>
         </View>
@@ -651,6 +869,35 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderWidth: 1,
     borderColor: '#DBEAFE',
+  },
+  keyIconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: '#F0FDF4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  modalErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 16,
+    width: '100%',
+  },
+  modalErrorText: {
+    color: '#B91C1C',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
   },
 
   /* Modal Titles */

@@ -43,15 +43,32 @@ export default function AuthScreen({ route, navigation }) {
 
   const handleSubmit = async () => {
     setErrorMsg('');
-    const targetEmail = email.trim() || 'dilshan.perera@colombo.lk';
-    const targetPassword = password || 'FintechSecure@2025!';
+    const targetEmail = email.trim();
+    const targetPassword = password;
 
-    if (!isLogin) {
+    if (isLogin) {
+      if (!targetEmail || !targetPassword) {
+        setErrorMsg('Please enter both your email address and password.');
+        return;
+      }
+    } else {
       if (!name.trim()) {
         setErrorMsg('Please enter your full name.');
         return;
       }
-      if (password && confirmPassword && password !== confirmPassword) {
+      if (!targetEmail) {
+        setErrorMsg('Please enter a valid email address.');
+        return;
+      }
+      if (!targetPassword) {
+        setErrorMsg('Please create a secure password.');
+        return;
+      }
+      if (targetPassword.length < 6) {
+        setErrorMsg('Password must be at least 6 characters long.');
+        return;
+      }
+      if (confirmPassword && targetPassword !== confirmPassword) {
         setErrorMsg('Passwords do not match.');
         return;
       }
@@ -66,10 +83,17 @@ export default function AuthScreen({ route, navigation }) {
       if (isLogin) {
         await login(targetEmail, targetPassword);
       } else {
-        await register(name.trim() || 'Dilshan Perera', targetEmail, targetPassword);
+        await register(name.trim(), targetEmail, targetPassword);
       }
     } catch (err) {
-      setErrorMsg(err.response?.data?.message || 'Authentication failed. Please check your details.');
+      const serverMsg = err.response?.data?.message;
+      if (serverMsg) {
+        setErrorMsg(serverMsg);
+      } else if (err.message && err.message.toLowerCase().includes('network')) {
+        setErrorMsg('Unable to connect to Expenso server. Please verify backend is running.');
+      } else {
+        setErrorMsg('Authentication failed. Please check your credentials and try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -135,7 +159,27 @@ export default function AuthScreen({ route, navigation }) {
                 <Text style={styles.registerCardHeading}>Create your account</Text>
               )}
 
-              {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
+              {errorMsg ? (
+                <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle" size={18} color="#DC2626" style={{ marginRight: 8 }} />
+                  <Text style={styles.errorBannerText}>{errorMsg}</Text>
+                </View>
+              ) : null}
+
+              {isLogin && (
+                <TouchableOpacity
+                  style={styles.demoPill}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setEmail('dilshan.perera@colombo.lk');
+                    setPassword('FintechSecure@2025!');
+                    setErrorMsg('');
+                  }}
+                >
+                  <Ionicons name="sparkles" size={13} color="#0284C7" style={{ marginRight: 6 }} />
+                  <Text style={styles.demoPillText}>Auto-fill Demo Credentials</Text>
+                </TouchableOpacity>
+              )}
 
               {/* Full Name Input (Register mode) */}
               {!isLogin && (
@@ -617,12 +661,39 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 18,
   },
-  errorText: {
-    color: '#EF4444',
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  errorBannerText: {
+    color: '#B91C1C',
     fontSize: 13,
     fontWeight: '600',
+    flex: 1,
+  },
+  demoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     marginBottom: 14,
-    textAlign: 'center',
+  },
+  demoPillText: {
+    color: '#0284C7',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   /* Inputs */

@@ -21,7 +21,17 @@ const userSchema = new mongoose.Schema(
     },
     currency: {
       type: String,
-      default: 'USD',
+      default: 'LKR',
+    },
+    mobile: {
+      type: String,
+      trim: true,
+    },
+    resetPasswordOtp: {
+      type: String,
+    },
+    resetPasswordExpires: {
+      type: Date,
     },
   },
   { timestamps: true }
