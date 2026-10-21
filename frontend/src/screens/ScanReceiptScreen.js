@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
@@ -240,6 +241,9 @@ export default function ScanReceiptScreen({ navigation }) {
           </LinearGradient>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Floating Bottom Navigation Bar */}
+      <FloatingBottomNav currentScreen="" navigation={navigation} />
     </SafeAreaView>
   );
 }
@@ -282,7 +286,7 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     paddingHorizontal: 18,
-    paddingBottom: 30,
+    paddingBottom: 100,
   },
 
   /* Camera Viewport */

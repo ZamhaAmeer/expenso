@@ -29,12 +29,17 @@ exports.getTransactionSummary = async (req, res) => {
         totalExpense += tx.amount;
       }
 
-      const dateStr = new Date(tx.date).toISOString().split('T')[0];
+      let dateStr;
+      try {
+        dateStr = new Date(tx.date || Date.now()).toISOString().split('T')[0];
+      } catch (e) {
+        dateStr = new Date().toISOString().split('T')[0];
+      }
       if (!heatmapData[dateStr]) {
         heatmapData[dateStr] = 0;
       }
       if (tx.type === 'expense') {
-        heatmapData[dateStr] += tx.amount;
+        heatmapData[dateStr] += (tx.amount || 0);
       }
     });
 

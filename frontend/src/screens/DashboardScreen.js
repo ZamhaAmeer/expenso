@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
@@ -110,35 +111,35 @@ const INITIAL_NOTIFICATIONS = [
 export default function DashboardScreen({ navigation }) {
   const { user, logout } = useContext(AuthContext);
   const [summary, setSummary] = useState({
-    balance: 245000,
-    totalIncome: 320000,
-    totalExpense: 75000,
+    balance: 0,
+    totalIncome: 0,
+    totalExpense: 0,
   });
-  const [recentTx, setRecentTx] = useState(DEFAULT_TRANSACTIONS);
+  const [recentTx, setRecentTx] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
   const [activeTab, setActiveTab] = useState('Home');
 
   // Notification Popup State
   const [showNotifModal, setShowNotifModal] = useState(false);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
 
   const unreadCount = notifications.filter((n) => n.isUnread).length;
 
   const fetchData = async () => {
     try {
       const [summaryRes, txRes] = await Promise.all([
-        api.get('/transactions/summary'),
-        api.get('/transactions'),
+        api.get('/transactions/summary').catch(() => null),
+        api.get('/transactions').catch(() => null),
       ]);
       if (summaryRes?.data && summaryRes.data.balance !== undefined) {
         setSummary({
-          balance: summaryRes.data.balance || 245000,
-          totalIncome: summaryRes.data.totalIncome || 320000,
-          totalExpense: summaryRes.data.totalExpense || 75000,
+          balance: Number(summaryRes.data.balance || 0),
+          totalIncome: Number(summaryRes.data.totalIncome || 0),
+          totalExpense: Number(summaryRes.data.totalExpense || 0),
         });
       }
-      if (txRes?.data && Array.isArray(txRes.data) && txRes.data.length > 0) {
+      if (txRes?.data && Array.isArray(txRes.data)) {
         const mapped = txRes.data.slice(0, 4).map((tx, idx) => ({
           id: tx._id || String(idx),
           title: tx.title || 'Transaction',
@@ -151,9 +152,11 @@ export default function DashboardScreen({ navigation }) {
           iconColor: tx.type === 'income' ? '#16A34A' : '#0284C7',
         }));
         setRecentTx(mapped);
+      } else {
+        setRecentTx([]);
       }
     } catch (err) {
-      console.log('Using default dashboard dataset:', err.message);
+      console.log('Error fetching dashboard:', err.message);
     }
   };
 
@@ -395,25 +398,45 @@ export default function DashboardScreen({ navigation }) {
 
           {/* Transactions List */}
           <View style={styles.transactionsList}>
-            {recentTx.map((tx) => (
-              <View key={tx.id} style={styles.txCard}>
-                <View style={[styles.txIconCircle, { backgroundColor: tx.iconBg }]}>
-                  <Ionicons name={tx.icon} size={20} color={tx.iconColor} />
+            {recentTx.length === 0 ? (
+              <View style={styles.emptyRecentCard}>
+                <View style={styles.emptyRecentCircle}>
+                  <Ionicons name="sparkles-outline" size={24} color="#0284C7" />
                 </View>
-
-                <View style={styles.txInfo}>
-                  <Text style={styles.txTitle}>{tx.title}</Text>
-                  <Text style={styles.txDate}>{tx.dateCategory}</Text>
-                </View>
-
-                <View style={styles.txRight}>
-                  <Text style={[styles.txAmountText, tx.type === 'income' && styles.txIncomeText]}>
-                    {tx.amount}
-                  </Text>
-                  <Text style={styles.txStatusText}>{tx.status}</Text>
-                </View>
+                <Text style={styles.emptyRecentTitle}>No transactions recorded yet</Text>
+                <Text style={styles.emptyRecentSub}>
+                  Tap "Expense" or "Scan Bill" above to record your very first expense!
+                </Text>
+                <TouchableOpacity
+                  style={styles.addFirstBtn}
+                  onPress={() => navigation?.navigate('AddExpense')}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="add" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.addFirstBtnText}>Add Expense</Text>
+                </TouchableOpacity>
               </View>
-            ))}
+            ) : (
+              recentTx.map((tx) => (
+                <View key={tx.id} style={styles.txCard}>
+                  <View style={[styles.txIconCircle, { backgroundColor: tx.iconBg }]}>
+                    <Ionicons name={tx.icon} size={20} color={tx.iconColor} />
+                  </View>
+
+                  <View style={styles.txInfo}>
+                    <Text style={styles.txTitle}>{tx.title}</Text>
+                    <Text style={styles.txDate}>{tx.dateCategory}</Text>
+                  </View>
+
+                  <View style={styles.txRight}>
+                    <Text style={[styles.txAmountText, tx.type === 'income' && styles.txIncomeText]}>
+                      {tx.amount}
+                    </Text>
+                    <Text style={styles.txStatusText}>{tx.status}</Text>
+                  </View>
+                </View>
+              ))
+            )}
           </View>
 
           {/* Export Monthly Statement Banner */}
@@ -438,79 +461,7 @@ export default function DashboardScreen({ navigation }) {
       </ScrollView>
 
       {/* Floating Bottom Navigation Bar */}
-      <View style={styles.bottomNavContainer}>
-        <View style={styles.floatingNavBar}>
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => setActiveTab('Home')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.navHomeBadge, activeTab === 'Home' && styles.navHomeBadgeActive]}>
-              <Ionicons name="home" size={20} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveTab('Velocity');
-              navigation?.navigate('Transactions');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="bar-chart-outline"
-              size={22}
-              color={activeTab === 'Velocity' ? '#2563EB' : '#94A3B8'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveTab('Calendar');
-              navigation?.navigate('Calendar');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="calendar-outline"
-              size={22}
-              color={activeTab === 'Calendar' ? '#2563EB' : '#94A3B8'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveTab('AIChat');
-              navigation?.navigate('AIChat');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="sparkles-outline"
-              size={22}
-              color={activeTab === 'AIChat' ? '#2563EB' : '#94A3B8'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveTab('Profile');
-              navigation?.navigate('Settings');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="person-outline"
-              size={22}
-              color={activeTab === 'Profile' ? '#2563EB' : '#94A3B8'}
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <FloatingBottomNav currentScreen="Dashboard" navigation={navigation} />
 
       {/* Notification Popup Badge Modal matching Design Mockup */}
       <Modal
@@ -1224,5 +1175,62 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#94A3B8',
+  },
+
+  /* Empty Recent Transactions Card */
+  emptyRecentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+    marginVertical: 6,
+  },
+  emptyRecentCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E0F2FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  emptyRecentTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  emptyRecentSub: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+  },
+  addFirstBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  addFirstBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

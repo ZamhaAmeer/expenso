@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useContext } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,45 +16,24 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
+import { AuthContext } from '../context/AuthContext';
+import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
-const INITIAL_MESSAGES = [
-  {
-    id: 'msg-1',
-    sender: 'ai',
-    time: '10:14 AM',
-    text: 'Hi Alex! 👋 Tell me what you spent in plain English or local currency.',
-    exampleBox: 'For example: "Spent Rs. 4,500 on dinner at Java Lounge" or "Paid Rs. 3,490 for Dialog broadband".',
-  },
-  {
-    id: 'msg-2',
-    sender: 'user',
-    time: '10:15 AM',
-    text: 'Spent 4,500 on dinner at Java Lounge yesterday with Commercial Bank card.',
-    status: 'Processed',
-  },
-  {
-    id: 'msg-3',
-    sender: 'ai_card',
-    matchScore: 'Extraction Match 99.2%',
-    parsed: {
-      merchant: 'Java Lounge',
-      subMerchant: 'Jawatte Branch',
-      category: 'Food & Dining',
-      budgetStatus: 'Under Budget',
-      amount: '4,500',
-      dateTime: 'Yesterday',
-      timeApprox: 'Approx. 08:30 PM',
-      paymentMethod: 'ComBank LKR',
-      cardSub: 'Card •••• 8912',
-    },
-  },
-];
-
 export default function AIChatScreen({ navigation }) {
+  const { user } = useContext(AuthContext);
+  const userName = user?.name ? user.name.split(' ')[0] : 'there';
   const [prompt, setPrompt] = useState('');
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState([
+    {
+      id: 'msg-welcome',
+      sender: 'ai',
+      time: 'Just now',
+      text: `Hi ${userName}! 👋 Tell me what you spent in plain English or Sinhala / Tamil words.`,
+      exampleBox: 'For example: "Spent Rs. 4,500 on dinner at Java Lounge" or "Paid Rs. 3,490 for Dialog broadband".',
+    },
+  ]);
   const [loading, setLoading] = useState(false);
   const [loggedMessages, setLoggedMessages] = useState({});
   const scrollViewRef = useRef();
@@ -402,6 +381,9 @@ export default function AIChatScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Floating Bottom Navigation Bar */}
+      <FloatingBottomNav currentScreen="AIChat" navigation={navigation} />
     </SafeAreaView>
   );
 }
@@ -489,7 +471,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 18,
     paddingTop: 14,
-    paddingBottom: 100,
+    paddingBottom: 170,
   },
 
   /* Date Divider */
@@ -803,11 +785,12 @@ const styles = StyleSheet.create({
   /* Floating Bottom Input */
   bottomInputWrapper: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 90,
     left: 0,
     right: 0,
     alignItems: 'center',
     paddingHorizontal: 16,
+    zIndex: 900,
   },
   floatingInputCard: {
     width: '100%',

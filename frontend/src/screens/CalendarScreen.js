@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   StyleSheet,
   Text,
@@ -13,58 +13,33 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Circle, Line } from 'react-native-svg';
+import api from '../services/api';
+import { AuthContext } from '../context/AuthContext';
+import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
-const DAYS_STRIP = [
-  { day: 'Mon', date: '14', status: 'low', dotColor: '#16A34A' },
-  { day: 'Tue', date: '15', status: 'med', dotColor: '#EAB308' },
-  { day: 'Wed', date: '16', status: 'low', dotColor: '#16A34A' },
-  { day: 'Thu', date: '17', status: 'active', isSelected: true },
-  { day: 'Fri', date: '18', status: 'med', dotColor: '#EAB308' },
-  { day: 'Sat', date: '19', status: 'high', dotColor: '#EF4444' },
-];
-
-const RECURRING_BILLS = [
-  {
-    id: '1',
-    title: 'Dialog Home Broadband',
-    amount: 'Rs. 3,490.00',
-    status: 'Confirmed',
-    statusBg: '#DCFCE7',
-    statusColor: '#16A34A',
-    icon: 'wifi-outline',
-    iconBg: '#F3E8FF',
-    iconColor: '#9333EA',
-  },
-  {
-    id: '2',
-    title: 'Apartment Rent',
-    amount: 'Rs. 65,000.00',
-    amountColor: '#EF4444',
-    isActionable: true,
-    actionText: 'Pay Early',
-    icon: 'home-outline',
-    iconBg: '#FEE2E2',
-    iconColor: '#EF4444',
-  },
-  {
-    id: '3',
-    title: 'Gym Membership',
-    amount: 'Rs. 7,500.00',
-    status: 'Scheduled',
-    statusBg: '#F1F5F9',
-    statusColor: '#64748B',
-    icon: 'fitness-outline',
-    iconBg: '#E0F2FE',
-    iconColor: '#0284C7',
-  },
-];
-
 export default function CalendarScreen({ navigation }) {
-  const [selectedDay, setSelectedDay] = useState('17');
-  const [showAdvisor, setShowAdvisor] = useState(true);
+  const { user } = useContext(AuthContext);
+  const [balance, setBalance] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(new Date().getDate().toString());
+  const [bills, setBills] = useState([]);
+  const [showAdvisor, setShowAdvisor] = useState(false);
   const [activeNavTab, setActiveNavTab] = useState('Calendar');
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const res = await api.get('/transactions/summary').catch(() => null);
+        if (res?.data && res.data.balance !== undefined) {
+          setBalance(Number(res.data.balance || 0));
+        }
+      } catch (e) {
+        // quiet fallback
+      }
+    };
+    loadData();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -104,7 +79,9 @@ export default function CalendarScreen({ navigation }) {
 
             <View style={styles.balanceAmountRow}>
               <Text style={styles.currencyPrefix}>Rs. </Text>
-              <Text style={styles.balanceMainText}>182,500.00</Text>
+              <Text style={styles.balanceMainText}>
+                {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Text>
             </View>
 
             <Text style={styles.salaryCycleText}>Salary cycle: 25th Oct - 24th Nov</Text>
@@ -299,41 +276,53 @@ export default function CalendarScreen({ navigation }) {
           {/* Scheduled Recurring Bills */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Scheduled Recurring Bills</Text>
-            <View style={styles.upcomingPill}>
-              <Text style={styles.upcomingText}>3 Upcoming</Text>
-            </View>
+            {bills.length > 0 && (
+              <View style={styles.upcomingPill}>
+                <Text style={styles.upcomingText}>{bills.length} Upcoming</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.billsList}>
-            {RECURRING_BILLS.map((bill) => (
-              <View key={bill.id} style={styles.billCard}>
-                <View style={[styles.billIconCircle, { backgroundColor: bill.iconBg }]}>
-                  <Ionicons name={bill.icon} size={20} color={bill.iconColor} />
-                </View>
-
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.billTitle}>{bill.title}</Text>
-                </View>
-
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[styles.billAmount, bill.amountColor && { color: bill.amountColor }]}>
-                    {bill.amount}
-                  </Text>
-
-                  {bill.isActionable ? (
-                    <TouchableOpacity style={styles.payEarlyBtn} activeOpacity={0.85}>
-                      <Text style={styles.payEarlyText}>{bill.actionText}</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={[styles.statusBadge, { backgroundColor: bill.statusBg }]}>
-                      <Text style={[styles.statusText, { color: bill.statusColor }]}>
-                        {bill.status}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+            {bills.length === 0 ? (
+              <View style={styles.emptyBillsCard}>
+                <Ionicons name="calendar-outline" size={32} color="#94A3B8" style={{ marginBottom: 8 }} />
+                <Text style={styles.emptyBillsTitle}>No recurring bills due</Text>
+                <Text style={styles.emptyBillsSub}>
+                  Upcoming subscriptions and repeating bills will appear here automatically.
+                </Text>
               </View>
-            ))}
+            ) : (
+              bills.map((bill) => (
+                <View key={bill.id} style={styles.billCard}>
+                  <View style={[styles.billIconCircle, { backgroundColor: bill.iconBg }]}>
+                    <Ionicons name={bill.icon} size={20} color={bill.iconColor} />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.billTitle}>{bill.title}</Text>
+                  </View>
+
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.billAmount, bill.amountColor && { color: bill.amountColor }]}>
+                      {bill.amount}
+                    </Text>
+
+                    {bill.isActionable ? (
+                      <TouchableOpacity style={styles.payEarlyBtn} activeOpacity={0.85}>
+                        <Text style={styles.payEarlyText}>{bill.actionText}</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={[styles.statusBadge, { backgroundColor: bill.statusBg }]}>
+                        <Text style={[styles.statusText, { color: bill.statusColor }]}>
+                          {bill.status}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              ))
+            )}
           </View>
 
           {/* Expenso Advisor AI Banner */}
@@ -366,51 +355,7 @@ export default function CalendarScreen({ navigation }) {
       </ScrollView>
 
       {/* Floating Bottom Navigation Bar */}
-      <View style={styles.bottomNavContainer}>
-        <View style={styles.floatingNavBar}>
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Dashboard')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="home-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Transactions')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="bar-chart-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => setActiveNavTab('Calendar')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navActiveCircle}>
-              <Ionicons name="calendar" size={20} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Transactions')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="card-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Settings')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="person-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <FloatingBottomNav currentScreen="Calendar" navigation={navigation} />
     </SafeAreaView>
   );
 }
@@ -948,5 +893,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 6,
+  },
+
+  /* Empty Recurring Bills State */
+  emptyBillsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+    marginVertical: 4,
+  },
+  emptyBillsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  emptyBillsSub: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 16,
   },
 });
