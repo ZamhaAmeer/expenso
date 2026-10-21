@@ -291,7 +291,9 @@ export default function ForgotPasswordScreen({ navigation }) {
                     We'll send a 6-digit verification code to verify your identity.
                   </Text>
                 </View>
-              </V              {/* Primary Submit Button */}
+              </View>
+
+              {/* Primary Submit Button */}
               <TouchableOpacity
                 activeOpacity={0.9}
                 style={styles.submitButtonTouch}
