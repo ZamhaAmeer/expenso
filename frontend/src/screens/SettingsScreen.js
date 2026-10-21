@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
+import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
@@ -302,47 +303,7 @@ export default function SettingsScreen({ navigation }) {
       </ScrollView>
 
       {/* Floating Bottom Navigation Bar */}
-      <View style={styles.bottomNavContainer}>
-        <View style={styles.floatingNavBar}>
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Dashboard')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="grid-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Transactions')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="trending-up-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Calendar')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="card-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('AIChat')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="sparkles-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
-            <View style={styles.navActiveCircle}>
-              <Ionicons name="person" size={20} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <FloatingBottomNav currentScreen="Settings" navigation={navigation} />
     </SafeAreaView>
   );
 }

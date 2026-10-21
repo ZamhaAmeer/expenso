@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import transactionService from '../services/transactionService';
+import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
@@ -637,60 +638,7 @@ export default function TransactionsScreen({ navigation }) {
       </ScrollView>
 
       {/* Floating Bottom Navigation Bar */}
-      <View style={styles.bottomNavContainer}>
-        <View style={styles.floatingNavBar}>
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveNavTab('Home');
-              navigation?.navigate('Dashboard');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="home-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => setActiveNavTab('History')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navActiveCircle}>
-              <Ionicons name="document-text" size={20} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveNavTab('Calendar');
-              navigation?.navigate('Calendar');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="calendar-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => setActiveNavTab('Card')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="card-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveNavTab('Profile');
-              navigation?.navigate('Settings');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="person-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <FloatingBottomNav currentScreen="Transactions" navigation={navigation} />
 
       {/* Transaction Detail & Actions Bottom Sheet Modal */}
       <Modal

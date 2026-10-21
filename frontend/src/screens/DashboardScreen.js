@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
@@ -438,79 +439,7 @@ export default function DashboardScreen({ navigation }) {
       </ScrollView>
 
       {/* Floating Bottom Navigation Bar */}
-      <View style={styles.bottomNavContainer}>
-        <View style={styles.floatingNavBar}>
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => setActiveTab('Home')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.navHomeBadge, activeTab === 'Home' && styles.navHomeBadgeActive]}>
-              <Ionicons name="home" size={20} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveTab('Velocity');
-              navigation?.navigate('Transactions');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="bar-chart-outline"
-              size={22}
-              color={activeTab === 'Velocity' ? '#2563EB' : '#94A3B8'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveTab('Calendar');
-              navigation?.navigate('Calendar');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="calendar-outline"
-              size={22}
-              color={activeTab === 'Calendar' ? '#2563EB' : '#94A3B8'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveTab('AIChat');
-              navigation?.navigate('AIChat');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="sparkles-outline"
-              size={22}
-              color={activeTab === 'AIChat' ? '#2563EB' : '#94A3B8'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => {
-              setActiveTab('Profile');
-              navigation?.navigate('Settings');
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="person-outline"
-              size={22}
-              color={activeTab === 'Profile' ? '#2563EB' : '#94A3B8'}
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <FloatingBottomNav currentScreen="Dashboard" navigation={navigation} />
 
       {/* Notification Popup Badge Modal matching Design Mockup */}
       <Modal

@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Circle, Line } from 'react-native-svg';
+import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
@@ -366,51 +367,7 @@ export default function CalendarScreen({ navigation }) {
       </ScrollView>
 
       {/* Floating Bottom Navigation Bar */}
-      <View style={styles.bottomNavContainer}>
-        <View style={styles.floatingNavBar}>
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Dashboard')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="home-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Transactions')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="bar-chart-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => setActiveNavTab('Calendar')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navActiveCircle}>
-              <Ionicons name="calendar" size={20} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Transactions')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="card-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation?.navigate('Settings')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="person-outline" size={22} color="#94A3B8" />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <FloatingBottomNav currentScreen="Calendar" navigation={navigation} />
     </SafeAreaView>
   );
 }

@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
+import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
@@ -402,6 +403,9 @@ export default function AIChatScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Floating Bottom Navigation Bar */}
+      <FloatingBottomNav currentScreen="AIChat" navigation={navigation} />
     </SafeAreaView>
   );
 }
@@ -489,7 +493,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 18,
     paddingTop: 14,
-    paddingBottom: 100,
+    paddingBottom: 170,
   },
 
   /* Date Divider */
@@ -803,11 +807,12 @@ const styles = StyleSheet.create({
   /* Floating Bottom Input */
   bottomInputWrapper: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 90,
     left: 0,
     right: 0,
     alignItems: 'center',
     paddingHorizontal: 16,
+    zIndex: 900,
   },
   floatingInputCard: {
     width: '100%',

@@ -45,7 +45,13 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('[Expenso API Response Error]', error.message, error.code, error.response?.status);
+    console.error(
+      '[Expenso API Response Error]',
+      error.message,
+      error.code,
+      error.response?.status,
+      JSON.stringify(error.response?.data)
+    );
     return Promise.reject(error);
   }
 );
