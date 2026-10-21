@@ -245,6 +245,8 @@ export default function AuthScreen({ route, navigation }) {
                     secureTextEntry={!showPassword}
                     value={password}
                     onChangeText={setPassword}
+                    returnKeyType={isLogin ? 'go' : 'next'}
+                    onSubmitEditing={isLogin ? handleSubmit : undefined}
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                     <Ionicons
