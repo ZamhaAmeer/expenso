@@ -50,8 +50,10 @@ export default function SettingsScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.rootContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
+      <SafeAreaView style={styles.topSafeArea} />
+      <SafeAreaView style={styles.container}>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -91,69 +93,6 @@ export default function SettingsScreen({ navigation }) {
             <View style={styles.profileInfo}>
               <Text style={styles.userName}>{user?.name || 'Kasun Perera'}</Text>
               <Text style={styles.userEmail}>{user?.email || 'kasun.finance@expensomail.lk'}</Text>
-            </View>
-          </View>
-
-          {/* Connected Accounts Section */}
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionTitleGroup}>
-              <Ionicons name="business-outline" size={16} color="#0284C7" style={{ marginRight: 6 }} />
-              <Text style={styles.sectionTitle}>Connected Accounts</Text>
-            </View>
-
-            <TouchableOpacity activeOpacity={0.8} style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="add-circle-outline" size={14} color="#2563EB" style={{ marginRight: 3 }} />
-              <Text style={styles.addBankLink}>Add Bank</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.accountsList}>
-            {/* Commercial Bank */}
-            <View style={styles.accountCard}>
-              <View style={[styles.accountIconCircle, { backgroundColor: '#E0F2FE' }]}>
-                <Ionicons name="wallet-outline" size={20} color="#0284C7" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.bankName}>Commercial Bank </Text>
-                  <View style={styles.greenStatusDot} />
-                </View>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.bankBalance}>Rs. 185,400.00</Text>
-                <Text style={styles.syncStatusGreen}>Sync: 4m ago</Text>
-              </View>
-            </View>
-
-            {/* Sampath Bank */}
-            <View style={styles.accountCard}>
-              <View style={[styles.accountIconCircle, { backgroundColor: '#DCFCE7' }]}>
-                <Ionicons name="card-outline" size={20} color="#16A34A" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.bankName}>Sampath Bank </Text>
-                  <View style={styles.greenStatusDot} />
-                </View>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.bankBalance}>Rs. 59,600.00</Text>
-                <Text style={styles.syncStatusGray}>Sync: 1h ago</Text>
-              </View>
-            </View>
-
-            {/* Petty Cash Wallet */}
-            <View style={styles.accountCard}>
-              <View style={[styles.accountIconCircle, { backgroundColor: '#F1F5F9' }]}>
-                <Ionicons name="cash-outline" size={20} color="#64748B" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.bankName}>Petty Cash Wallet</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.bankBalance}>Rs. 12,500.00</Text>
-                <Text style={styles.syncStatusGray}>Offline ledger</Text>
-              </View>
             </View>
           </View>
 
@@ -305,10 +244,19 @@ export default function SettingsScreen({ navigation }) {
       {/* Floating Bottom Navigation Bar */}
       <FloatingBottomNav currentScreen="Settings" navigation={navigation} />
     </SafeAreaView>
+  </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+  },
+  topSafeArea: {
+    flex: 0,
+    backgroundColor: '#2563EB',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F6F9FD',

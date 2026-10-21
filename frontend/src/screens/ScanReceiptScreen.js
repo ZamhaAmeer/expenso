@@ -54,25 +54,34 @@ export default function ScanReceiptScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F6F9FD" />
+    <View style={styles.rootContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
+      <SafeAreaView style={styles.topSafeArea} />
+      <SafeAreaView style={styles.container}>
 
-      {/* Header Bar */}
-      <View style={styles.headerBar}>
-        <TouchableOpacity
-          style={styles.circleHeaderBtn}
-          onPress={() => navigation?.goBack()}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="chevron-back-outline" size={20} color="#0F172A" />
-        </TouchableOpacity>
+      {/* Blue Gradient Header Bar */}
+      <LinearGradient
+        colors={['#2563EB', '#3B82F6', '#4F46E5']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.headerGradient}
+      >
+        <View style={styles.headerBar}>
+          <TouchableOpacity
+            style={styles.circleHeaderBtn}
+            onPress={() => navigation?.goBack()}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-back-outline" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Scan Receipt</Text>
+          <Text style={styles.headerTitle}>Scan Receipt</Text>
 
-        <TouchableOpacity style={styles.circleHeaderBtn} activeOpacity={0.8}>
-          <Ionicons name="ellipsis-horizontal-outline" size={20} color="#0F172A" />
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity style={styles.circleHeaderBtn} activeOpacity={0.8}>
+            <Ionicons name="ellipsis-horizontal-outline" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -245,43 +254,51 @@ export default function ScanReceiptScreen({ navigation }) {
       {/* Floating Bottom Navigation Bar */}
       <FloatingBottomNav currentScreen="" navigation={navigation} />
     </SafeAreaView>
+  </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+  },
+  topSafeArea: {
+    flex: 0,
+    backgroundColor: '#2563EB',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F6F9FD',
   },
 
-  /* Header Bar */
+  /* Header Section */
+  headerGradient: {
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 20) + 8 : 12,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
   headerBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 20) + 6 : 8,
-    paddingBottom: 14,
   },
   circleHeaderBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#1E3A8A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
 
   scrollContent: {

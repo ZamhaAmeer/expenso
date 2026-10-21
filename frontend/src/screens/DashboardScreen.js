@@ -179,8 +179,10 @@ export default function DashboardScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.rootContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
+      <SafeAreaView style={styles.topSafeArea} />
+      <SafeAreaView style={styles.container}>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -554,10 +556,19 @@ export default function DashboardScreen({ navigation }) {
         </TouchableOpacity>
       </Modal>
     </SafeAreaView>
+  </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+  },
+  topSafeArea: {
+    flex: 0,
+    backgroundColor: '#2563EB',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F6F9FD',

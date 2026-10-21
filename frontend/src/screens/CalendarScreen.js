@@ -3,6 +3,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image,
   SafeAreaView,
   StatusBar,
   ScrollView,
@@ -18,6 +19,27 @@ import { AuthContext } from '../context/AuthContext';
 import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
+
+// Generate 7-day week strip dynamically based on today's real date
+const getDynamicWeekStrip = () => {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const today = new Date();
+  const strip = [];
+
+  for (let i = -3; i <= 3; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    strip.push({
+      day: days[d.getDay()],
+      date: d.getDate().toString(),
+      isToday: i === 0,
+      dotColor: i === 0 ? '#2563EB' : '#10B981',
+    });
+  }
+  return strip;
+};
+
+const DAYS_STRIP = getDynamicWeekStrip();
 
 export default function CalendarScreen({ navigation }) {
   const { user } = useContext(AuthContext);
@@ -42,8 +64,10 @@ export default function CalendarScreen({ navigation }) {
   }, []);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.rootContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
+      <SafeAreaView style={styles.topSafeArea} />
+      <SafeAreaView style={styles.container}>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -59,9 +83,11 @@ export default function CalendarScreen({ navigation }) {
           {/* Top Brand Bar */}
           <View style={styles.topBar}>
             <View style={styles.brandRow}>
-              <View style={styles.logoBadgeCircle}>
-                <Ionicons name="diamond-outline" size={16} color="#FBBF24" />
-              </View>
+              <Image
+                source={require('../../assets/logo_expenso.png')}
+                style={styles.headerLogo}
+                resizeMode="contain"
+              />
               <Text style={styles.brandTitle}>Expenso</Text>
             </View>
 
@@ -214,9 +240,9 @@ export default function CalendarScreen({ navigation }) {
           <View style={styles.outflowBanner}>
             <View style={styles.outflowLeft}>
               <Ionicons name="calendar-outline" size={16} color="#0284C7" style={{ marginRight: 8 }} />
-              <Text style={styles.outflowText}>Thursday, 17 Oct Recorded Outflow</Text>
+              <Text style={styles.outflowText}>Day {selectedDay} Recorded Outflow</Text>
             </View>
-            <Text style={styles.outflowAmount}>Rs. 2,150.00</Text>
+            <Text style={styles.outflowAmount}>Rs. 0.00</Text>
           </View>
 
           {/* October Velocity Chart Card */}
@@ -357,10 +383,19 @@ export default function CalendarScreen({ navigation }) {
       {/* Floating Bottom Navigation Bar */}
       <FloatingBottomNav currentScreen="Calendar" navigation={navigation} />
     </SafeAreaView>
+  </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+  },
+  topSafeArea: {
+    flex: 0,
+    backgroundColor: '#2563EB',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F6F9FD',
@@ -387,14 +422,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  logoBadgeCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
+  headerLogo: {
+    width: 32,
+    height: 32,
+    marginRight: 10,
   },
   brandTitle: {
     fontSize: 22,
