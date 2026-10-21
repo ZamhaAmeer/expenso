@@ -86,13 +86,13 @@ export default function AuthScreen({ route, navigation }) {
         await register(name.trim(), targetEmail, targetPassword);
       }
     } catch (err) {
+      console.error('[AuthScreen Error]', err);
       const serverMsg = err.response?.data?.message;
       if (serverMsg) {
         setErrorMsg(serverMsg);
-      } else if (err.message && err.message.toLowerCase().includes('network')) {
-        setErrorMsg('Unable to connect to Expenso server. Please verify backend is running.');
       } else {
-        setErrorMsg('Authentication failed. Please check your credentials and try again.');
+        const errorDetail = err.message ? ` (${err.message})` : '';
+        setErrorMsg(`Unable to connect to Expenso server${errorDetail}.`);
       }
     } finally {
       setLoading(false);
@@ -245,6 +245,8 @@ export default function AuthScreen({ route, navigation }) {
                     secureTextEntry={!showPassword}
                     value={password}
                     onChangeText={setPassword}
+                    returnKeyType={isLogin ? 'go' : 'next'}
+                    onSubmitEditing={isLogin ? handleSubmit : undefined}
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                     <Ionicons

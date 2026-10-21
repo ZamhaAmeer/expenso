@@ -175,7 +175,13 @@ export default function ForgotPasswordScreen({ navigation }) {
         [
           {
             text: 'Sign In Now',
-            onPress: () => navigation?.navigate('Auth', { isSignUp: false }),
+            onPress: () => {
+              if (navigation?.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation?.navigate('Auth', { isSignUp: false });
+              }
+            },
           },
         ]
       );
@@ -291,7 +297,9 @@ export default function ForgotPasswordScreen({ navigation }) {
                     We'll send a 6-digit verification code to verify your identity.
                   </Text>
                 </View>
-              </V              {/* Primary Submit Button */}
+              </View>
+
+              {/* Primary Submit Button */}
               <TouchableOpacity
                 activeOpacity={0.9}
                 style={styles.submitButtonTouch}
@@ -349,7 +357,13 @@ export default function ForgotPasswordScreen({ navigation }) {
             {/* Remember Password Link Below Card */}
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() => navigation?.navigate('Auth', { isSignUp: false })}
+              onPress={() => {
+                if (navigation?.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation?.navigate('Auth', { isSignUp: false });
+                }
+              }}
               style={styles.footerLinkTouch}
             >
               <Text style={styles.footerLinkText}>
