@@ -178,7 +178,7 @@ const DEFAULT_GROUPS = [
 ];
 
 export default function TransactionsScreen({ navigation }) {
-  const [groupedTx, setGroupedTx] = useState(DEFAULT_GROUPS);
+  const [groupedTx, setGroupedTx] = useState([]);
   const [summary, setSummary] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All'); // 'All', 'Expenses', 'Income', 'Needs Review'
@@ -509,7 +509,7 @@ export default function TransactionsScreen({ navigation }) {
               </Text>
               <View style={[styles.badgeCount, activeFilter === 'All' && styles.badgeCountActive]}>
                 <Text style={[styles.badgeCountText, activeFilter === 'All' && styles.badgeCountTextActive]}>
-                  24
+                  {summary?.totalCount !== undefined ? summary.totalCount : totalCount}
                 </Text>
               </View>
             </TouchableOpacity>

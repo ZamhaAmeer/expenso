@@ -30,15 +30,17 @@ const CATEGORIES = [
 
 export default function AddExpenseScreen({ navigation, route }) {
   const [transactionType, setTransactionType] = useState('Expense'); // 'Expense', 'Income', 'Transfer'
-  const [amount, setAmount] = useState('4,850.00');
+  const [amount, setAmount] = useState('0.00');
   const [selectedCategory, setSelectedCategory] = useState('Food & Dining');
-  const [merchant, setMerchant] = useState('Cargills Food City – Colombo 03');
-  const [dateStr, setDateStr] = useState('Today, 24 May');
-  const [timeStr, setTimeStr] = useState('06:42 PM');
-  const [paidFrom, setPaidFrom] = useState('Commercial Bank LKR');
-  const [accountSub, setAccountSub] = useState('•••• 8920 (Avail: Rs. 142,500.00)');
+  const [merchant, setMerchant] = useState('');
+  const [dateStr, setDateStr] = useState('Today');
+  const [timeStr, setTimeStr] = useState(
+    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  );
+  const [paidFrom, setPaidFrom] = useState('Cash');
+  const [accountSub, setAccountSub] = useState('Default Account');
   const [notes, setNotes] = useState('');
-  const [hasReceipt, setHasReceipt] = useState(true);
+  const [hasReceipt, setHasReceipt] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Quick Amount helper
@@ -262,10 +264,12 @@ export default function AddExpenseScreen({ navigation, route }) {
                 style={styles.textInput}
                 value={merchant}
                 onChangeText={setMerchant}
-                placeholder="Cargills Food City – Colombo 03"
+                placeholder="e.g. Keells, Cargills, Uber, Dialog"
                 placeholderTextColor="#94A3B8"
               />
-              <Ionicons name="checkmark-circle" size={18} color="#10B981" style={{ marginLeft: 6 }} />
+              {merchant ? (
+                <Ionicons name="checkmark-circle" size={18} color="#10B981" style={{ marginLeft: 6 }} />
+              ) : null}
             </View>
           </View>
 
