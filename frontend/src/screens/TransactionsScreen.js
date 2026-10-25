@@ -3,6 +3,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image,
   SafeAreaView,
   StatusBar,
   ScrollView,
@@ -377,8 +378,10 @@ export default function TransactionsScreen({ navigation }) {
   const filteredData = getFilteredGroups();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.rootContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#2563EB" />
+      <SafeAreaView style={styles.topSafeArea} />
+      <SafeAreaView style={styles.container}>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -397,9 +400,11 @@ export default function TransactionsScreen({ navigation }) {
           {/* Top Brand Bar */}
           <View style={styles.topBar}>
             <View style={styles.brandRow}>
-              <View style={styles.logoBadgeCircle}>
-                <Ionicons name="diamond-outline" size={16} color="#FBBF24" />
-              </View>
+              <Image
+                source={require('../../assets/logo_expenso.png')}
+                style={styles.headerLogo}
+                resizeMode="contain"
+              />
               <Text style={styles.brandTitle}>Expenso</Text>
             </View>
 
@@ -420,12 +425,12 @@ export default function TransactionsScreen({ navigation }) {
               <Text style={styles.spendMainText}>
                 {summary && summary.totalExpense !== undefined
                   ? Number(summary.totalExpense).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).split('.')[0]
-                  : '184,320'}
+                  : '0'}
               </Text>
               <Text style={styles.currencySuffix}>
                 .{summary && summary.totalExpense !== undefined
                   ? (Number(summary.totalExpense).toFixed(2).split('.')[1] || '00')
-                  : '50'}
+                  : '00'}
               </Text>
             </View>
 
@@ -509,7 +514,9 @@ export default function TransactionsScreen({ navigation }) {
               </Text>
               <View style={[styles.badgeCount, activeFilter === 'All' && styles.badgeCountActive]}>
                 <Text style={[styles.badgeCountText, activeFilter === 'All' && styles.badgeCountTextActive]}>
-                  {summary?.totalCount !== undefined ? summary.totalCount : totalCount}
+                  {summary?.totalCount !== undefined
+                    ? summary.totalCount
+                    : groupedTx.reduce((sum, grp) => sum + (grp.items?.length || 0), 0)}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -746,11 +753,20 @@ export default function TransactionsScreen({ navigation }) {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+  },
+  topSafeArea: {
+    flex: 0,
+    backgroundColor: '#2563EB',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F6F9FD',
@@ -777,14 +793,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  logoBadgeCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
+  headerLogo: {
+    width: 32,
+    height: 32,
+    marginRight: 10,
   },
   brandTitle: {
     fontSize: 22,
