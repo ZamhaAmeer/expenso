@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
+import budgetService from '../services/budgetService';
 import { AuthContext } from '../context/AuthContext';
 import FloatingBottomNav from '../components/FloatingBottomNav';
 
@@ -120,6 +121,13 @@ export default function DashboardScreen({ navigation }) {
   const [showBalance, setShowBalance] = useState(true);
   const [activeTab, setActiveTab] = useState('Home');
 
+  const [budgetOverview, setBudgetOverview] = useState({
+    budgets: [],
+    totalBudget: 0,
+    totalSpent: 0,
+    overallPercentage: 0,
+  });
+
   // Notification Popup State
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -128,9 +136,10 @@ export default function DashboardScreen({ navigation }) {
 
   const fetchData = async () => {
     try {
-      const [summaryRes, txRes] = await Promise.all([
+      const [summaryRes, txRes, budgetRes] = await Promise.all([
         api.get('/transactions/summary').catch(() => null),
         api.get('/transactions').catch(() => null),
+        budgetService.getBudgets().catch(() => null),
       ]);
       if (summaryRes?.data && summaryRes.data.balance !== undefined) {
         setSummary({
@@ -138,6 +147,28 @@ export default function DashboardScreen({ navigation }) {
           totalIncome: Number(summaryRes.data.totalIncome || 0),
           totalExpense: Number(summaryRes.data.totalExpense || 0),
         });
+      }
+      if (budgetRes && budgetRes.budgets) {
+        setBudgetOverview(budgetRes);
+        // Build dynamic budget warning notifications if user exceeds threshold
+        const budgetAlerts = budgetRes.budgets
+          .filter((b) => b.isNearLimit || b.isOverBudget)
+          .map((b, idx) => ({
+            id: `b-${b._id || idx}`,
+            type: 'alert',
+            title: b.isOverBudget ? `Budget Exceeded: ${b.category}` : `Smart Budget Alert: ${b.category}`,
+            time: 'Just now',
+            description: `${b.category} reached ${b.percentage}% of limit (Rs. ${b.spent.toLocaleString()} / ${b.limit.toLocaleString()}).`,
+            highlight: `${b.percentage}%`,
+            icon: 'warning-outline',
+            iconBg: b.isOverBudget ? '#FEE2E2' : '#FEF3C7',
+            iconColor: b.isOverBudget ? '#EF4444' : '#D97706',
+            hasActions: true,
+            isUnread: true,
+          }));
+        if (budgetAlerts.length > 0) {
+          setNotifications(budgetAlerts);
+        }
       }
       if (txRes?.data && Array.isArray(txRes.data)) {
         const mapped = txRes.data.slice(0, 4).map((tx, idx) => ({
@@ -382,8 +413,57 @@ export default function DashboardScreen({ navigation }) {
             <View style={styles.savingsBanner}>
               <Ionicons name="sparkles" size={15} color="#0284C7" style={{ marginRight: 8 }} />
               <Text style={styles.savingsText}>
-                On track to save <Text style={styles.savingsHighlight}>Rs. 42,000</Text> this cycle.
+                Total Monthly Budget: <Text style={styles.savingsHighlight}>Rs. {budgetOverview.totalBudget.toLocaleString()}</Text> ({budgetOverview.overallPercentage}% spent)
               </Text>
+            </View>
+          </View>
+
+          {/* Monthly Category Budgets Tracker */}
+          <View style={styles.cardContainer}>
+            <View style={styles.velocityHeader}>
+              <View style={styles.velocityTitleRow}>
+                <View style={[styles.velocityIconBadge, { backgroundColor: '#EFF6FF' }]}>
+                  <Ionicons name="pie-chart-outline" size={16} color="#2563EB" />
+                </View>
+                <Text style={styles.cardTitle}>Category Budgets</Text>
+              </View>
+              <Text style={styles.velocityTargetText}>
+                {budgetOverview.totalSpent.toLocaleString()} / {budgetOverview.totalBudget.toLocaleString()} LKR
+              </Text>
+            </View>
+
+            {/* Category Progress Bars */}
+            <View style={styles.categoryBudgetsList}>
+              {(budgetOverview.budgets || []).slice(0, 4).map((b) => (
+                <View key={b._id || b.category} style={styles.budgetItemWrapper}>
+                  <View style={styles.budgetMetaRow}>
+                    <Text style={styles.budgetCategoryTitle}>{b.category}</Text>
+                    <Text style={[
+                      styles.budgetCategoryAmounts,
+                      b.isOverBudget ? { color: '#EF4444', fontWeight: '800' } : null
+                    ]}>
+                      Rs. {b.spent.toLocaleString()} / {b.limit.toLocaleString()}
+                    </Text>
+                  </View>
+
+                  {/* Progress Bar Track */}
+                  <View style={styles.budgetProgressTrack}>
+                    <View
+                      style={[
+                        styles.budgetProgressFill,
+                        {
+                          width: `${Math.min(b.percentage, 100)}%`,
+                          backgroundColor: b.isOverBudget
+                            ? '#EF4444'
+                            : b.isNearLimit
+                            ? '#F59E0B'
+                            : (b.color || '#2563EB'),
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+              ))}
             </View>
           </View>
 
@@ -870,6 +950,41 @@ const styles = StyleSheet.create({
   savingsHighlight: {
     color: '#0284C7',
     fontWeight: '700',
+  },
+
+  /* Category Budgets List */
+  categoryBudgetsList: {
+    marginTop: 8,
+    gap: 12,
+  },
+  budgetItemWrapper: {
+    marginBottom: 4,
+  },
+  budgetMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  budgetCategoryTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  budgetCategoryAmounts: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  budgetProgressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#F1F5F9',
+    overflow: 'hidden',
+  },
+  budgetProgressFill: {
+    height: '100%',
+    borderRadius: 4,
   },
 
   /* Section Header */

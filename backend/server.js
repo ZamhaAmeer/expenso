@@ -17,6 +17,7 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
+app.use('/api/budgets', require('./routes/budgetRoutes'));
 
 app.get('/', (req, res) => {
   res.json({ message: 'Expenso API Service is Running 🚀' });
