@@ -12,6 +12,10 @@ import {
   Modal,
   Dimensions,
   Platform,
+  Alert,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +25,24 @@ import { AuthContext } from '../context/AuthContext';
 import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
+
+// Standard budget categories with theme colors and icons
+const BUDGET_CATEGORIES = [
+  { name: 'Groceries', icon: 'cart-outline', color: '#0284C7' },
+  { name: 'Food & Dining', icon: 'restaurant-outline', color: '#F59E0B' },
+  { name: 'Transportation', icon: 'car-outline', color: '#10B981' },
+  { name: 'Utilities', icon: 'receipt-outline', color: '#8B5CF6' },
+  { name: 'Shopping', icon: 'bag-handle-outline', color: '#EC4899' },
+  { name: 'Entertainment', icon: 'film-outline', color: '#6366F1' },
+  { name: 'Healthcare', icon: 'medical-outline', color: '#EF4444' },
+  { name: 'Travel', icon: 'airplane-outline', color: '#0EA5E9' },
+  { name: 'Education', icon: 'school-outline', color: '#14B8A6' },
+  { name: 'Other', icon: 'grid-outline', color: '#64748B' },
+];
+
+const PRESET_AMOUNTS = [5000, 10000, 25000, 50000];
+const THRESHOLD_OPTIONS = [70, 80, 90, 100];
+const PALETTE_COLORS = ['#2563EB', '#0284C7', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#EF4444'];
 
 // Default initial transaction mock matching screenshot
 const DEFAULT_TRANSACTIONS = [
@@ -207,6 +229,113 @@ export default function DashboardScreen({ navigation }) {
 
   const formatCurrency = (val) => {
     return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Budget Management State & Handlers
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showAllBudgetsModal, setShowAllBudgetsModal] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(null);
+  const [budgetCategory, setBudgetCategory] = useState('Groceries');
+  const [customCategory, setCustomCategory] = useState('');
+  const [budgetLimit, setBudgetLimit] = useState('');
+  const [budgetThreshold, setBudgetThreshold] = useState(80);
+  const [budgetColor, setBudgetColor] = useState('#0284C7');
+  const [isSavingBudget, setIsSavingBudget] = useState(false);
+
+  const handleOpenAddBudget = () => {
+    setEditingBudget(null);
+    setBudgetCategory('Groceries');
+    setCustomCategory('');
+    setBudgetLimit('');
+    setBudgetThreshold(80);
+    setBudgetColor('#0284C7');
+    setShowBudgetModal(true);
+  };
+
+  const handleOpenEditBudget = (b) => {
+    setEditingBudget(b);
+    const isPreset = BUDGET_CATEGORIES.some((c) => c.name === b.category);
+    if (isPreset) {
+      setBudgetCategory(b.category);
+      setCustomCategory('');
+    } else {
+      setBudgetCategory('Other');
+      setCustomCategory(b.category);
+    }
+    setBudgetLimit(String(b.limit || ''));
+    setBudgetThreshold(b.alertThreshold || 80);
+    setBudgetColor(b.color || '#2563EB');
+    setShowAllBudgetsModal(false);
+    setShowNotifModal(false);
+    setShowBudgetModal(true);
+  };
+
+  const handleSaveBudget = async () => {
+    const finalCategory = budgetCategory === 'Other' ? customCategory.trim() : budgetCategory;
+    if (!finalCategory) {
+      Alert.alert('Category Required', 'Please select or enter a budget category name.');
+      return;
+    }
+
+    const numericLimit = parseFloat(String(budgetLimit).replace(/,/g, ''));
+    if (isNaN(numericLimit) || numericLimit <= 0) {
+      Alert.alert('Invalid Limit', 'Please enter a valid budget limit amount greater than 0.');
+      return;
+    }
+
+    setIsSavingBudget(true);
+    try {
+      await budgetService.setBudget({
+        category: finalCategory,
+        limit: numericLimit,
+        alertThreshold: budgetThreshold,
+        color: budgetColor,
+      });
+
+      await fetchData();
+      setShowBudgetModal(false);
+      Alert.alert(
+        'Budget Target Saved 🎉',
+        `Monthly budget for "${finalCategory}" set to Rs. ${numericLimit.toLocaleString()}.`
+      );
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.message || 'Could not save budget. Please check your connection.');
+    } finally {
+      setIsSavingBudget(false);
+    }
+  };
+
+  const handleDeleteBudget = (id, categoryName) => {
+    Alert.alert(
+      'Delete Budget Target',
+      `Are you sure you want to remove the budget for "${categoryName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsSavingBudget(true);
+            try {
+              await budgetService.deleteBudget(id);
+              await fetchData();
+              setShowBudgetModal(false);
+              Alert.alert('Removed', `Budget for "${categoryName}" was successfully removed.`);
+            } catch (err) {
+              Alert.alert('Error', err.response?.data?.message || 'Could not delete budget.');
+            } finally {
+              setIsSavingBudget(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAddPresetAmount = (addAmount) => {
+    const current = parseFloat(String(budgetLimit).replace(/,/g, '')) || 0;
+    const nextVal = current + addAmount;
+    setBudgetLimit(String(nextVal));
   };
 
   return (
@@ -427,44 +556,117 @@ export default function DashboardScreen({ navigation }) {
                 </View>
                 <Text style={styles.cardTitle}>Category Budgets</Text>
               </View>
+
+              <TouchableOpacity
+                style={styles.setBudgetBtnPill}
+                activeOpacity={0.8}
+                onPress={handleOpenAddBudget}
+              >
+                <Ionicons name="add" size={14} color="#2563EB" style={{ marginRight: 2 }} />
+                <Text style={styles.setBudgetBtnText}>Set Budget</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Spent / Target Info Bar */}
+            <View style={styles.budgetSpentSubRow}>
               <Text style={styles.velocityTargetText}>
                 {budgetOverview.totalSpent.toLocaleString()} / {budgetOverview.totalBudget.toLocaleString()} LKR
+              </Text>
+              <Text style={[
+                styles.budgetRemainingPill,
+                budgetOverview.totalRemaining <= 0 ? { color: '#EF4444' } : { color: '#16A34A' }
+              ]}>
+                {budgetOverview.totalRemaining <= 0 ? 'Limit Reached' : `Rs. ${budgetOverview.totalRemaining.toLocaleString()} left`}
               </Text>
             </View>
 
             {/* Category Progress Bars */}
-            <View style={styles.categoryBudgetsList}>
-              {(budgetOverview.budgets || []).slice(0, 4).map((b) => (
-                <View key={b._id || b.category} style={styles.budgetItemWrapper}>
-                  <View style={styles.budgetMetaRow}>
-                    <Text style={styles.budgetCategoryTitle}>{b.category}</Text>
-                    <Text style={[
-                      styles.budgetCategoryAmounts,
-                      b.isOverBudget ? { color: '#EF4444', fontWeight: '800' } : null
-                    ]}>
-                      Rs. {b.spent.toLocaleString()} / {b.limit.toLocaleString()}
-                    </Text>
-                  </View>
+            {(!budgetOverview.budgets || budgetOverview.budgets.length === 0) ? (
+              <View style={styles.emptyBudgetBox}>
+                <Ionicons name="pie-chart-outline" size={32} color="#94A3B8" style={{ marginBottom: 8 }} />
+                <Text style={styles.emptyBudgetTitle}>No Category Budgets Yet</Text>
+                <Text style={styles.emptyBudgetSubtitle}>
+                  Set monthly category limits to receive smart warnings before overspending.
+                </Text>
+                <TouchableOpacity
+                  style={styles.addFirstBudgetBtn}
+                  activeOpacity={0.85}
+                  onPress={handleOpenAddBudget}
+                >
+                  <Ionicons name="add-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.addFirstBudgetBtnText}>Set First Budget</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.categoryBudgetsList}>
+                {budgetOverview.budgets.slice(0, 4).map((b) => (
+                  <TouchableOpacity
+                    key={b._id || b.category}
+                    style={styles.budgetItemWrapper}
+                    activeOpacity={0.7}
+                    onPress={() => handleOpenEditBudget(b)}
+                  >
+                    <View style={styles.budgetMetaRow}>
+                      <View style={styles.budgetTitleLeft}>
+                        <View style={[styles.budgetCategoryDot, { backgroundColor: b.color || '#2563EB' }]} />
+                        <Text style={styles.budgetCategoryTitle}>{b.category}</Text>
+                        {b.isOverBudget && (
+                          <View style={styles.overBudgetBadge}>
+                            <Text style={styles.overBudgetText}>Over</Text>
+                          </View>
+                        )}
+                        {!b.isOverBudget && b.isNearLimit && (
+                          <View style={styles.nearBudgetBadge}>
+                            <Text style={styles.nearBudgetText}>{b.percentage}%</Text>
+                          </View>
+                        )}
+                      </View>
 
-                  {/* Progress Bar Track */}
-                  <View style={styles.budgetProgressTrack}>
-                    <View
-                      style={[
-                        styles.budgetProgressFill,
-                        {
-                          width: `${Math.min(b.percentage, 100)}%`,
-                          backgroundColor: b.isOverBudget
-                            ? '#EF4444'
-                            : b.isNearLimit
-                            ? '#F59E0B'
-                            : (b.color || '#2563EB'),
-                        },
-                      ]}
-                    />
-                  </View>
-                </View>
-              ))}
-            </View>
+                      <View style={styles.budgetAmountsRight}>
+                        <Text style={[
+                          styles.budgetCategoryAmounts,
+                          b.isOverBudget ? { color: '#EF4444', fontWeight: '800' } : null
+                        ]}>
+                          Rs. {b.spent.toLocaleString()} / {b.limit.toLocaleString()}
+                        </Text>
+                        <Ionicons name="chevron-forward" size={14} color="#94A3B8" style={{ marginLeft: 4 }} />
+                      </View>
+                    </View>
+
+                    {/* Progress Bar Track */}
+                    <View style={styles.budgetProgressTrack}>
+                      <View
+                        style={[
+                          styles.budgetProgressFill,
+                          {
+                            width: `${Math.min(b.percentage, 100)}%`,
+                            backgroundColor: b.isOverBudget
+                              ? '#EF4444'
+                              : b.isNearLimit
+                              ? '#F59E0B'
+                              : (b.color || '#2563EB'),
+                          },
+                        ]}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+
+                {/* View All Budgets Button if more than 4 */}
+                {budgetOverview.budgets.length > 4 && (
+                  <TouchableOpacity
+                    style={styles.viewAllBudgetsBtn}
+                    activeOpacity={0.7}
+                    onPress={() => setShowAllBudgetsModal(true)}
+                  >
+                    <Text style={styles.viewAllBudgetsText}>
+                      View all {budgetOverview.budgets.length} category budgets
+                    </Text>
+                    <Ionicons name="chevron-forward" size={14} color="#2563EB" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Recent Transactions Header */}
@@ -619,12 +821,31 @@ export default function DashboardScreen({ navigation }) {
                     {/* Action Chips for Smart Budget Alert */}
                     {notif.hasActions && (
                       <View style={styles.notifActionRow}>
-                        <TouchableOpacity style={styles.adjustPillBtn} activeOpacity={0.8}>
-                          <Text style={styles.adjustBtnText}>Adjust</Text>
+                        <TouchableOpacity
+                          style={styles.adjustPillBtn}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            const matched = (budgetOverview.budgets || []).find((b) =>
+                              notif.title.toLowerCase().includes(b.category.toLowerCase())
+                            );
+                            if (matched) {
+                              handleOpenEditBudget(matched);
+                            } else {
+                              handleOpenAddBudget();
+                            }
+                          }}
+                        >
+                          <Text style={styles.adjustBtnText}>Adjust Target</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity activeOpacity={0.7}>
-                          <Text style={styles.quickActionText}>Quick action</Text>
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            setShowNotifModal(false);
+                            setShowAllBudgetsModal(true);
+                          }}
+                        >
+                          <Text style={styles.quickActionText}>View all</Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -634,6 +855,363 @@ export default function DashboardScreen({ navigation }) {
             </ScrollView>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Add / Edit Budget Target Modal */}
+      <Modal
+        visible={showBudgetModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBudgetModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdropOverlay}
+        >
+          <TouchableOpacity
+            style={styles.modalDismissTouchable}
+            activeOpacity={1}
+            onPress={() => setShowBudgetModal(false)}
+          />
+
+          <View style={styles.budgetModalCard}>
+            {/* Modal Drag Handle */}
+            <View style={styles.modalDragHandle} />
+
+            {/* Modal Header */}
+            <View style={styles.budgetModalHeader}>
+              <View style={styles.budgetModalTitleGroup}>
+                <Text style={styles.budgetModalTitle}>
+                  {editingBudget ? 'Edit Budget Target' : 'Set Category Budget'}
+                </Text>
+                <Text style={styles.budgetModalSub}>
+                  {editingBudget
+                    ? `Update monthly limit for ${editingBudget.category}`
+                    : 'Set monthly limits to get smart alerts and avoid overspending.'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => setShowBudgetModal(false)}
+                style={styles.modalCloseBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.budgetModalScroll}
+            >
+              {/* 1. Category Selection */}
+              <Text style={styles.inputSectionLabel}>Select Category</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryChipsRow}
+              >
+                {BUDGET_CATEGORIES.map((cat) => {
+                  const isSelected = budgetCategory === cat.name;
+                  return (
+                    <TouchableOpacity
+                      key={cat.name}
+                      style={[
+                        styles.categoryChip,
+                        isSelected && { borderColor: cat.color, backgroundColor: `${cat.color}15` },
+                      ]}
+                      activeOpacity={0.75}
+                      onPress={() => {
+                        setBudgetCategory(cat.name);
+                        setBudgetColor(cat.color);
+                      }}
+                    >
+                      <Ionicons
+                        name={cat.icon}
+                        size={16}
+                        color={isSelected ? cat.color : '#64748B'}
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          isSelected && { color: cat.color, fontWeight: '700' },
+                        ]}
+                      >
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Custom Category Input if "Other" is selected */}
+              {budgetCategory === 'Other' && (
+                <View style={styles.customCatInputWrapper}>
+                  <TextInput
+                    style={styles.customCatInput}
+                    placeholder="Enter custom category name"
+                    placeholderTextColor="#94A3B8"
+                    value={customCategory}
+                    onChangeText={setCustomCategory}
+                  />
+                </View>
+              )}
+
+              {/* 2. Monthly Budget Limit Input */}
+              <Text style={styles.inputSectionLabel}>Monthly Limit (LKR)</Text>
+              <View style={styles.amountInputContainer}>
+                <Text style={styles.currencyPrefixText}>Rs.</Text>
+                <TextInput
+                  style={styles.amountInput}
+                  placeholder="0.00"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  value={budgetLimit}
+                  onChangeText={setBudgetLimit}
+                />
+                {budgetLimit.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setBudgetLimit('')}
+                    style={styles.clearAmountBtn}
+                  >
+                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Quick Preset Buttons */}
+              <View style={styles.presetAmountsRow}>
+                {PRESET_AMOUNTS.map((amt) => (
+                  <TouchableOpacity
+                    key={amt}
+                    style={styles.presetAmountBtn}
+                    activeOpacity={0.7}
+                    onPress={() => handleAddPresetAmount(amt)}
+                  >
+                    <Text style={styles.presetAmountText}>+Rs. {amt.toLocaleString()}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* 3. Alert Threshold Selector */}
+              <Text style={styles.inputSectionLabel}>Smart Warning Threshold</Text>
+              <Text style={styles.inputSectionSub}>
+                Receive warning notifications when spending reaches this percentage.
+              </Text>
+              <View style={styles.thresholdRow}>
+                {THRESHOLD_OPTIONS.map((th) => {
+                  const isSelected = budgetThreshold === th;
+                  return (
+                    <TouchableOpacity
+                      key={th}
+                      style={[
+                        styles.thresholdBtn,
+                        isSelected && styles.thresholdBtnActive,
+                      ]}
+                      activeOpacity={0.75}
+                      onPress={() => setBudgetThreshold(th)}
+                    >
+                      <Text
+                        style={[
+                          styles.thresholdBtnText,
+                          isSelected && styles.thresholdBtnTextActive,
+                        ]}
+                      >
+                        {th}%
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* 4. Theme Color Selector */}
+              <Text style={styles.inputSectionLabel}>Indicator Accent Color</Text>
+              <View style={styles.colorPaletteRow}>
+                {PALETTE_COLORS.map((clr) => {
+                  const isSelected = budgetColor === clr;
+                  return (
+                    <TouchableOpacity
+                      key={clr}
+                      style={[
+                        styles.colorSwatch,
+                        { backgroundColor: clr },
+                        isSelected && styles.colorSwatchActive,
+                      ]}
+                      activeOpacity={0.8}
+                      onPress={() => setBudgetColor(clr)}
+                    >
+                      {isSelected && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* 5. Action Buttons */}
+              <View style={styles.budgetModalActions}>
+                <TouchableOpacity
+                  style={[styles.saveBudgetBtn, isSavingBudget && { opacity: 0.7 }]}
+                  activeOpacity={0.85}
+                  onPress={handleSaveBudget}
+                  disabled={isSavingBudget}
+                >
+                  {isSavingBudget ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name={editingBudget ? 'save-outline' : 'checkmark-circle-outline'}
+                        size={18}
+                        color="#FFFFFF"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={styles.saveBudgetBtnText}>
+                        {editingBudget ? 'Update Budget Target' : 'Save Budget Target'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {editingBudget && (
+                  <TouchableOpacity
+                    style={styles.deleteBudgetBtn}
+                    activeOpacity={0.8}
+                    onPress={() => handleDeleteBudget(editingBudget._id, editingBudget.category)}
+                    disabled={isSavingBudget}
+                  >
+                    <Ionicons name="trash-outline" size={16} color="#EF4444" style={{ marginRight: 6 }} />
+                    <Text style={styles.deleteBudgetBtnText}>Delete This Budget</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* All Category Budgets Overview Sheet */}
+      <Modal
+        visible={showAllBudgetsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAllBudgetsModal(false)}
+      >
+        <View style={styles.modalBackdropOverlay}>
+          <TouchableOpacity
+            style={styles.modalDismissTouchable}
+            activeOpacity={1}
+            onPress={() => setShowAllBudgetsModal(false)}
+          />
+
+          <View style={styles.allBudgetsModalCard}>
+            <View style={styles.modalDragHandle} />
+
+            <View style={styles.allBudgetsHeader}>
+              <View>
+                <Text style={styles.allBudgetsTitle}>Monthly Category Budgets</Text>
+                <Text style={styles.allBudgetsSub}>
+                  Total: Rs. {budgetOverview.totalSpent.toLocaleString()} / Rs. {budgetOverview.totalBudget.toLocaleString()}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowAllBudgetsModal(false)}
+                style={styles.modalCloseBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
+            >
+              {/* Progress Summary Card */}
+              <View style={styles.allBudgetsSummaryCard}>
+                <View style={styles.summaryTopRow}>
+                  <Text style={styles.summarySpentLabel}>
+                    Spent: <Text style={styles.summarySpentVal}>Rs. {budgetOverview.totalSpent.toLocaleString()}</Text>
+                  </Text>
+                  <Text style={styles.summaryPctVal}>{budgetOverview.overallPercentage}%</Text>
+                </View>
+                <View style={styles.summaryTrack}>
+                  <View
+                    style={[
+                      styles.summaryFill,
+                      { width: `${Math.min(budgetOverview.overallPercentage, 100)}%` },
+                    ]}
+                  />
+                </View>
+              </View>
+
+              {/* Budgets List */}
+              <View style={styles.allBudgetsListWrapper}>
+                {(budgetOverview.budgets || []).map((b) => (
+                  <View key={b._id || b.category} style={styles.allBudgetItemCard}>
+                    <View style={styles.allBudgetTopRow}>
+                      <View style={styles.allBudgetLeftGroup}>
+                        <View style={[styles.allBudgetDot, { backgroundColor: b.color || '#2563EB' }]} />
+                        <Text style={styles.allBudgetCategoryName}>{b.category}</Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.editBudgetRowBtn}
+                        activeOpacity={0.7}
+                        onPress={() => handleOpenEditBudget(b)}
+                      >
+                        <Ionicons name="pencil-outline" size={14} color="#2563EB" style={{ marginRight: 4 }} />
+                        <Text style={styles.editBudgetRowBtnText}>Edit</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.allBudgetAmountRow}>
+                      <Text style={styles.allBudgetSpentText}>
+                        Rs. {b.spent.toLocaleString()} <Text style={styles.allBudgetOfText}>of {b.limit.toLocaleString()}</Text>
+                      </Text>
+                      <Text
+                        style={[
+                          styles.allBudgetStatusBadge,
+                          b.isOverBudget
+                            ? styles.badgeOver
+                            : b.isNearLimit
+                            ? styles.badgeNear
+                            : styles.badgeSafe,
+                        ]}
+                      >
+                        {b.isOverBudget ? 'Over Budget' : `${b.percentage}%`}
+                      </Text>
+                    </View>
+
+                    <View style={styles.budgetProgressTrack}>
+                      <View
+                        style={[
+                          styles.budgetProgressFill,
+                          {
+                            width: `${Math.min(b.percentage, 100)}%`,
+                            backgroundColor: b.isOverBudget
+                              ? '#EF4444'
+                              : b.isNearLimit
+                              ? '#F59E0B'
+                              : (b.color || '#2563EB'),
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={styles.addNewBudgetBtnSheet}
+                activeOpacity={0.85}
+                onPress={handleOpenAddBudget}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.addNewBudgetBtnSheetText}>Set Another Category Budget</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   </View>
@@ -1358,5 +1936,509 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  /* Budget Management Component Styles */
+  setBudgetBtnPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  setBudgetBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  budgetSpentSubRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  budgetRemainingPill: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  emptyBudgetBox: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+  },
+  emptyBudgetTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  emptyBudgetSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  addFirstBudgetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  addFirstBudgetBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  budgetTitleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  budgetCategoryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  overBudgetBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  overBudgetText: {
+    color: '#EF4444',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  nearBudgetBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  nearBudgetText: {
+    color: '#D97706',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  budgetAmountsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  viewAllBudgetsBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 10,
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  viewAllBudgetsText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563EB',
+    marginRight: 4,
+  },
+
+  /* Budget Modal Styles */
+  modalBackdropOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalDismissTouchable: {
+    flex: 1,
+  },
+  budgetModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    maxHeight: '90%',
+  },
+  modalDragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  budgetModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 22,
+    marginBottom: 14,
+  },
+  budgetModalTitleGroup: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  budgetModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  budgetModalSub: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 17,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  budgetModalScroll: {
+    paddingHorizontal: 22,
+    paddingBottom: 24,
+  },
+  inputSectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  inputSectionSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: -4,
+    marginBottom: 10,
+  },
+  categoryChipsRow: {
+    gap: 8,
+    paddingVertical: 4,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  categoryChipText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  customCatInputWrapper: {
+    marginTop: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+  },
+  customCatInput: {
+    height: 42,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  amountInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 52,
+  },
+  currencyPrefixText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginRight: 6,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  clearAmountBtn: {
+    padding: 4,
+  },
+  presetAmountsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  presetAmountBtn: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  presetAmountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  thresholdRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  thresholdBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+  },
+  thresholdBtnActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+  },
+  thresholdBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  thresholdBtnTextActive: {
+    color: '#2563EB',
+  },
+  colorPaletteRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  colorSwatch: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  colorSwatchActive: {
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  budgetModalActions: {
+    marginTop: 22,
+    gap: 10,
+  },
+  saveBudgetBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    height: 50,
+    borderRadius: 16,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveBudgetBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  deleteBudgetBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    height: 44,
+    borderRadius: 14,
+  },
+  deleteBudgetBtnText: {
+    color: '#EF4444',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  /* All Budgets Sheet Styles */
+  allBudgetsModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    maxHeight: '88%',
+  },
+  allBudgetsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  allBudgetsTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  allBudgetsSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  allBudgetsSummaryCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  summaryTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summarySpentLabel: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  summarySpentVal: {
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  summaryPctVal: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#2563EB',
+  },
+  summaryTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  summaryFill: {
+    height: '100%',
+    backgroundColor: '#2563EB',
+    borderRadius: 4,
+  },
+  allBudgetsListWrapper: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  allBudgetItemCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  allBudgetTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  allBudgetLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  allBudgetDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  allBudgetCategoryName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  editBudgetRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  editBudgetRowBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  allBudgetAmountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  allBudgetSpentText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  allBudgetOfText: {
+    fontWeight: '400',
+    color: '#64748B',
+  },
+  allBudgetStatusBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgeOver: {
+    backgroundColor: '#FEE2E2',
+    color: '#EF4444',
+  },
+  badgeNear: {
+    backgroundColor: '#FEF3C7',
+    color: '#D97706',
+  },
+  badgeSafe: {
+    backgroundColor: '#DCFCE7',
+    color: '#16A34A',
+  },
+  addNewBudgetBtnSheet: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    height: 48,
+    borderRadius: 16,
+    marginTop: 4,
+  },
+  addNewBudgetBtnSheetText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
