@@ -15,6 +15,7 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -178,7 +179,7 @@ const DEFAULT_GROUPS = [
   },
 ];
 
-export default function TransactionsScreen({ navigation }) {
+export default function TransactionsScreen({ navigation, route }) {
   const [groupedTx, setGroupedTx] = useState([]);
   const [summary, setSummary] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -190,6 +191,19 @@ export default function TransactionsScreen({ navigation }) {
   const [selectedTx, setSelectedTx] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Export Statement Modal States
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState('csv'); // 'csv' or 'txt'
+  const [exportRange, setExportRange] = useState('all'); // 'all', 'this_month', 'last_30'
+  const [exportType, setExportType] = useState('all'); // 'all', 'expense', 'income'
+  const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    if (route?.params?.openExport) {
+      setShowExportModal(true);
+    }
+  }, [route?.params?.openExport]);
 
   const fetchTransactions = async () => {
     try {
@@ -322,6 +336,119 @@ export default function TransactionsScreen({ navigation }) {
     await fetchTransactions();
     setRefreshing(false);
   }, []);
+
+  const handleExportStatement = async () => {
+    setIsExporting(true);
+    try {
+      let startDate = null;
+      let endDate = null;
+      const now = new Date();
+
+      if (exportRange === 'this_month') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+      } else if (exportRange === 'last_30') {
+        const past = new Date();
+        past.setDate(past.getDate() - 30);
+        startDate = past.toISOString();
+        endDate = now.toISOString();
+      }
+
+      let csvContent = '';
+      try {
+        const backendCsv = await transactionService.exportTransactions({
+          format: 'csv',
+          type: exportType !== 'all' ? exportType : undefined,
+          startDate,
+          endDate,
+        });
+        if (typeof backendCsv === 'string' && backendCsv.length > 0) {
+          csvContent = backendCsv;
+        }
+      } catch (e) {
+        // Fallback to building CSV locally from loaded items
+      }
+
+      if (!csvContent) {
+        const allItems = groupedTx.flatMap((grp) => grp.items || []);
+        const filtered = allItems.filter((item) => {
+          if (exportType === 'expense' && item.type !== 'expense') return false;
+          if (exportType === 'income' && item.type !== 'income') return false;
+          return true;
+        });
+
+        const headers = ['Transaction ID', 'Title', 'Type', 'Category', 'Amount', 'Payment Method', 'Time/Date'];
+        const rows = filtered.map((item) => [
+          `"${item.id || ''}"`,
+          `"${(item.title || '').replace(/"/g, '""')}"`,
+          `"${item.type || 'expense'}"`,
+          `"${item.categoryTag || 'General'}"`,
+          `"${item.amount || '0'}"`,
+          `"${item.paymentMethod || 'Default'}"`,
+          `"${item.timeDate || ''}"`,
+        ]);
+        csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      }
+
+      if (exportFormat === 'csv') {
+        if (Platform.OS === 'web' && typeof document !== 'undefined') {
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.setAttribute('href', url);
+          link.setAttribute('download', `Expenso_Statement_${now.toISOString().split('T')[0]}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setShowExportModal(false);
+          Alert.alert('Statement Downloaded', 'Your CSV spreadsheet statement has been exported.');
+        } else {
+          await Share.share({
+            title: `Expenso Statement (${now.toLocaleString('en-US', { month: 'short', year: 'numeric' })})`,
+            message: csvContent,
+          });
+          setShowExportModal(false);
+        }
+      } else {
+        const allItems = groupedTx.flatMap((grp) => grp.items || []);
+        const totalInc = summary?.totalIncome || 0;
+        const totalExp = summary?.totalExpense || 0;
+        const netBal = summary?.balance !== undefined ? summary.balance : (totalInc - totalExp);
+
+        const summaryText = [
+          '========================================',
+          '        EXPENSO FINANCIAL STATEMENT     ',
+          '========================================',
+          `Generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`,
+          `Date Range: ${exportRange.replace('_', ' ').toUpperCase()}`,
+          `Type Filter: ${exportType.toUpperCase()}`,
+          '----------------------------------------',
+          `Total Income : +Rs. ${Number(totalInc).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+          `Total Expense: -Rs. ${Number(totalExp).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+          `Net Balance  :  Rs. ${Number(netBal).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+          '========================================',
+          '',
+          'Ledger Entries:',
+          ...allItems.slice(0, 20).map((it, i) => `${i + 1}. [${it.timeDate}] ${it.title} (${it.categoryTag}) - ${it.amount}`),
+          '',
+          '========================================',
+          'Exported from Expenso Personal Finance',
+        ].join('\n');
+
+        await Share.share({
+          title: 'Expenso Financial Statement Summary',
+          message: summaryText,
+        });
+        setShowExportModal(false);
+      }
+    } catch (err) {
+      if (err.message !== 'User did not share') {
+        Alert.alert('Export Error', err.message || 'Could not export statement.');
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleDeleteTransaction = (id) => {
     Alert.alert(
@@ -464,11 +591,15 @@ export default function TransactionsScreen({ navigation }) {
               <Text style={styles.actionLabel}>Expense</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionBtnWrapper} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.actionBtnWrapper}
+              activeOpacity={0.85}
+              onPress={() => setShowExportModal(true)}
+            >
               <View style={styles.actionCircle}>
-                <Ionicons name="swap-horizontal-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="download-outline" size={20} color="#FFFFFF" />
               </View>
-              <Text style={styles.actionLabel}>Convert</Text>
+              <Text style={styles.actionLabel}>Export</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionBtnWrapper} activeOpacity={0.85}>
@@ -556,8 +687,13 @@ export default function TransactionsScreen({ navigation }) {
           {/* Recent Transactions Header */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Recent Transactions</Text>
-            <TouchableOpacity activeOpacity={0.7}>
-              <Text style={styles.seeAllText}>See all</Text>
+            <TouchableOpacity
+              style={styles.exportPillBtn}
+              activeOpacity={0.8}
+              onPress={() => setShowExportModal(true)}
+            >
+              <Ionicons name="download-outline" size={14} color="#2563EB" style={{ marginRight: 4 }} />
+              <Text style={styles.exportPillText}>Export</Text>
             </TouchableOpacity>
           </View>
 
@@ -717,6 +853,21 @@ export default function TransactionsScreen({ navigation }) {
                   ) : null}
                 </View>
 
+                {/* Quick Share Item Button */}
+                <TouchableOpacity
+                  style={styles.shareTxBtnTouch}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    Share.share({
+                      title: `${selectedTx.title} - Expenso Receipt`,
+                      message: `Expenso Receipt:\nTitle: ${selectedTx.title}\nAmount: ${selectedTx.amount}\nCategory: ${selectedTx.categoryTag}\nPayment Method: ${selectedTx.paymentMethod}\nTime: ${selectedTx.timeDate}\nRecorded in Expenso App`,
+                    });
+                  }}
+                >
+                  <Ionicons name="share-social-outline" size={16} color="#2563EB" style={{ marginRight: 6 }} />
+                  <Text style={styles.shareTxBtnText}>Share Receipt Details</Text>
+                </TouchableOpacity>
+
                 {selectedTx.id && !selectedTx.id.startsWith('tx-') ? (
                   <TouchableOpacity
                     style={styles.deleteBtnTouch}
@@ -750,6 +901,183 @@ export default function TransactionsScreen({ navigation }) {
                 )}
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Export Statement Sheet Modal */}
+      <Modal
+        visible={showExportModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowExportModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalDismissOverlay}
+            activeOpacity={1}
+            onPress={() => setShowExportModal(false)}
+          />
+
+          <View style={styles.exportSheetCard}>
+            <View style={styles.modalGrabBar} />
+
+            <View style={styles.exportModalHeader}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={styles.exportModalTitle}>Export Financial Statement</Text>
+                <Text style={styles.exportModalSub}>
+                  Download CSV spreadsheets or share formatted summaries.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowExportModal(false)}
+                style={styles.modalCloseBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={18} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.exportModalBody}>
+              {/* 1. File Format Selection */}
+              <Text style={styles.exportSectionTitle}>Select Export Format</Text>
+              <View style={styles.formatSelectorRow}>
+                <TouchableOpacity
+                  style={[styles.formatCard, exportFormat === 'csv' && styles.formatCardActive]}
+                  activeOpacity={0.8}
+                  onPress={() => setExportFormat('csv')}
+                >
+                  <View style={[styles.formatIconCircle, exportFormat === 'csv' && styles.formatIconActive]}>
+                    <Ionicons
+                      name="document-text-outline"
+                      size={20}
+                      color={exportFormat === 'csv' ? '#2563EB' : '#64748B'}
+                    />
+                  </View>
+                  <Text style={[styles.formatTitle, exportFormat === 'csv' && styles.formatTitleActive]}>
+                    CSV / Excel
+                  </Text>
+                  <Text style={styles.formatSub}>Spreadsheet (.csv)</Text>
+                  {exportFormat === 'csv' && (
+                    <View style={styles.formatCheckBadge}>
+                      <Ionicons name="checkmark-circle" size={16} color="#2563EB" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.formatCard, exportFormat === 'txt' && styles.formatCardActive]}
+                  activeOpacity={0.8}
+                  onPress={() => setExportFormat('txt')}
+                >
+                  <View style={[styles.formatIconCircle, exportFormat === 'txt' && styles.formatIconActive]}>
+                    <Ionicons
+                      name="reader-outline"
+                      size={20}
+                      color={exportFormat === 'txt' ? '#2563EB' : '#64748B'}
+                    />
+                  </View>
+                  <Text style={[styles.formatTitle, exportFormat === 'txt' && styles.formatTitleActive]}>
+                    Summary Report
+                  </Text>
+                  <Text style={styles.formatSub}>Text ledger (.txt)</Text>
+                  {exportFormat === 'txt' && (
+                    <View style={styles.formatCheckBadge}>
+                      <Ionicons name="checkmark-circle" size={16} color="#2563EB" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* 2. Date Range Filter */}
+              <Text style={styles.exportSectionTitle}>Date Range</Text>
+              <View style={styles.pillSelectorRow}>
+                {[
+                  { id: 'all', label: 'All Records' },
+                  { id: 'this_month', label: 'This Month' },
+                  { id: 'last_30', label: 'Last 30 Days' },
+                ].map((r) => {
+                  const isSelected = exportRange === r.id;
+                  return (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.optionPill, isSelected && styles.optionPillActive]}
+                      onPress={() => setExportRange(r.id)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.optionPillText, isSelected && styles.optionPillTextActive]}>
+                        {r.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* 3. Transaction Type Filter */}
+              <Text style={styles.exportSectionTitle}>Record Type</Text>
+              <View style={styles.pillSelectorRow}>
+                {[
+                  { id: 'all', label: 'All (Income & Expenses)' },
+                  { id: 'expense', label: 'Expenses Only' },
+                  { id: 'income', label: 'Income Only' },
+                ].map((t) => {
+                  const isSelected = exportType === t.id;
+                  return (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={[styles.optionPill, isSelected && styles.optionPillActive]}
+                      onPress={() => setExportType(t.id)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.optionPillText, isSelected && styles.optionPillTextActive]}>
+                        {t.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* 4. Statement Summary Preview Box */}
+              <View style={styles.exportSummaryCard}>
+                <View style={styles.exportSummaryHeader}>
+                  <Ionicons name="stats-chart-outline" size={16} color="#2563EB" style={{ marginRight: 6 }} />
+                  <Text style={styles.exportSummaryTitle}>Statement Preview</Text>
+                </View>
+
+                <View style={styles.exportSummaryRow}>
+                  <Text style={styles.exportSummaryLabel}>Available Transactions</Text>
+                  <Text style={styles.exportSummaryVal}>
+                    {groupedTx.reduce((sum, grp) => sum + (grp.items?.length || 0), 0)} entries
+                  </Text>
+                </View>
+
+                <View style={styles.exportSummaryRow}>
+                  <Text style={styles.exportSummaryLabel}>Net Balance</Text>
+                  <Text style={[styles.exportSummaryVal, { color: '#16A34A' }]}>
+                    Rs. {Number(summary?.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Export Action Button */}
+              <TouchableOpacity
+                style={[styles.exportActionBtn, isExporting && { opacity: 0.7 }]}
+                activeOpacity={0.85}
+                onPress={handleExportStatement}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="share-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.exportActionBtnText}>
+                      {exportFormat === 'csv' ? 'Export CSV Spreadsheet' : 'Export Statement Summary'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1331,6 +1659,217 @@ const styles = StyleSheet.create({
   },
   demoDismissBtnText: {
     color: '#64748B',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  /* Header Export Button */
+  exportPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  exportPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+
+  /* Share Receipt Button inside Detail Modal */
+  shareTxBtnTouch: {
+    width: '100%',
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  shareTxBtnText: {
+    color: '#2563EB',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  /* Export Sheet Modal Styles */
+  modalDismissOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  exportSheetCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    maxHeight: '88%',
+  },
+  exportModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 22,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  exportModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  exportModalSub: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  exportModalBody: {
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+  },
+  exportSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  formatSelectorRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 4,
+  },
+  formatCard: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    position: 'relative',
+  },
+  formatCardActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+  },
+  formatIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  formatIconActive: {
+    backgroundColor: '#DBEAFE',
+  },
+  formatTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  formatTitleActive: {
+    color: '#2563EB',
+  },
+  formatSub: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  formatCheckBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+  },
+  pillSelectorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  optionPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  optionPillActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  optionPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  optionPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  exportSummaryCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    marginVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  exportSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  exportSummaryTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  exportSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  exportSummaryLabel: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  exportSummaryVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  exportActionBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    height: 50,
+    borderRadius: 16,
+    marginTop: 6,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  exportActionBtnText: {
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

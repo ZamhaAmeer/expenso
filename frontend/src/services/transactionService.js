@@ -47,6 +47,18 @@ export const transactionService = {
     const response = await api.delete(`/transactions/${id}`);
     return response.data;
   },
+
+  /**
+   * Export transactions as CSV or JSON format
+   * @param {Object} params - { format, type, category, startDate, endDate }
+   */
+  async exportTransactions(params = {}) {
+    const response = await api.get('/transactions/export', {
+      params,
+      responseType: params.format === 'csv' ? 'text' : 'json',
+    });
+    return response.data;
+  },
 };
 
 export default transactionService;

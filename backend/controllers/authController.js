@@ -81,6 +81,34 @@ exports.getMe = async (req, res) => {
   }
 };
 
+// @desc Update user profile & preferences
+// @route PUT /api/auth/profile
+exports.updateProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const { name, currency, mobile } = req.body;
+    if (name) user.name = name.trim();
+    if (currency) user.currency = currency.trim();
+    if (mobile !== undefined) user.mobile = mobile.trim();
+
+    const updatedUser = await user.save();
+
+    res.json({
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      currency: updatedUser.currency,
+      mobile: updatedUser.mobile,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc Request password recovery OTP
 // @route POST /api/auth/forgot-password
 exports.forgotPassword = async (req, res) => {
