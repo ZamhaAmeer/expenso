@@ -736,7 +736,11 @@ export default function DashboardScreen({ navigation }) {
                 <Text style={styles.exportSubtitle}>PDF & Excel sheets ready for October</Text>
               </View>
 
-              <TouchableOpacity style={styles.downloadCircleBtn} activeOpacity={0.85}>
+              <TouchableOpacity
+                style={styles.downloadCircleBtn}
+                activeOpacity={0.85}
+                onPress={() => navigation?.navigate('Transactions', { openExport: true })}
+              >
                 <Ionicons name="download-outline" size={20} color="#FFFFFF" />
               </TouchableOpacity>
             </LinearGradient>

@@ -144,3 +144,77 @@ exports.deleteTransaction = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// @desc Export transactions as CSV or JSON report
+// @route GET /api/transactions/export
+exports.exportTransactions = async (req, res) => {
+  try {
+    const { format = 'csv', type, category, startDate, endDate } = req.query;
+
+    const query = { user: req.user.id };
+
+    if (type && ['expense', 'income'].includes(type)) {
+      query.type = type;
+    }
+
+    if (category && category !== 'All') {
+      query.category = category;
+    }
+
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) query.date.$gte = new Date(startDate);
+      if (endDate) query.date.$lte = new Date(endDate);
+    }
+
+    const transactions = await Transaction.find(query).sort({ date: -1 });
+
+    if (format === 'csv') {
+      const headers = [
+        'Transaction ID',
+        'Date',
+        'Title',
+        'Type',
+        'Category',
+        'Amount (LKR)',
+        'Payment Method',
+        'Merchant',
+        'Notes',
+        'Status',
+      ];
+
+      const csvRows = transactions.map((t) => {
+        const d = t.date ? new Date(t.date).toISOString().split('T')[0] : '';
+        const escapeCsv = (str) => `"${String(str || '').replace(/"/g, '""')}"`;
+        return [
+          escapeCsv(t._id),
+          escapeCsv(d),
+          escapeCsv(t.title),
+          escapeCsv(t.type),
+          escapeCsv(t.category || 'General'),
+          Number(t.amount || 0).toFixed(2),
+          escapeCsv(t.paymentMethod || 'Default'),
+          escapeCsv(t.merchant || ''),
+          escapeCsv(t.notes || ''),
+          escapeCsv(t.isReviewed ? 'Reviewed' : 'Pending'),
+        ].join(',');
+      });
+
+      const csvContent = [headers.join(','), ...csvRows].join('\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="expenso_statement_${Date.now()}.csv"`
+      );
+      return res.status(200).send(csvContent);
+    }
+
+    res.json({
+      count: transactions.length,
+      transactions,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

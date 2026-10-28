@@ -20,48 +20,298 @@ import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
 
-// Generate 7-day week strip dynamically based on today's real date
-const getDynamicWeekStrip = () => {
+import React, { useState, useEffect, useCallback, useContext } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+  Platform,
+  RefreshControl,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Circle, Line } from 'react-native-svg';
+import api from '../services/api';
+import transactionService from '../services/transactionService';
+import budgetService from '../services/budgetService';
+import { AuthContext } from '../context/AuthContext';
+import FloatingBottomNav from '../components/FloatingBottomNav';
+
+const { width } = Dimensions.get('window');
+
+// Date helper to compare same calendar day regardless of time
+const isSameCalendarDay = (d1, d2) => {
+  if (!d1 || !d2) return false;
+  const date1 = new Date(d1);
+  const date2 = new Date(d2);
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+};
+
+// Generate 7-day week strip dynamically based on week offset and compute real outflow
+const getDynamicWeekStrip = (weekOffset = 0, txList = [], safeDailyBuffer = 5000) => {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const base = new Date();
+  base.setDate(base.getDate() + (weekOffset * 7));
   const today = new Date();
   const strip = [];
 
   for (let i = -3; i <= 3; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+
+    // Compute real daily outflow from transactions
+    const dayOutflow = (txList || [])
+      .filter((tx) => tx.type === 'expense' && isSameCalendarDay(tx.date, d))
+      .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+
+    const isToday = isSameCalendarDay(d, today);
+    let dotColor = '#10B981'; // Green: low or 0 outflow
+    if (dayOutflow > 0 && dayOutflow <= safeDailyBuffer) {
+      dotColor = '#EAB308'; // Amber: medium outflow
+    } else if (dayOutflow > safeDailyBuffer) {
+      dotColor = '#EF4444'; // Red: high outflow
+    }
+    if (isToday) {
+      dotColor = '#2563EB'; // Blue: today
+    }
+
     strip.push({
       day: days[d.getDay()],
       date: d.getDate().toString(),
-      isToday: i === 0,
-      dotColor: i === 0 ? '#2563EB' : '#10B981',
+      fullDate: d,
+      isToday,
+      outflow: dayOutflow,
+      dotColor,
     });
   }
   return strip;
 };
 
-const DAYS_STRIP = getDynamicWeekStrip();
+// Generate spending velocity curve coordinates from real transaction data
+const generateVelocityChartData = (txList = [], monthlyCap = 240000, chartW = width - 76, chartH = 100) => {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const todayDate = now.getDate();
+  const monthName = now.toLocaleString('en-US', { month: 'long' });
+  const monthShort = now.toLocaleString('en-US', { month: 'short' });
+
+  // Filter expenses for current month
+  const monthExpenses = (txList || []).filter((tx) => {
+    if (tx.type !== 'expense') return false;
+    const d = new Date(tx.date || Date.now());
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  // Calculate daily totals up to today
+  const dailyTotals = Array(daysInMonth + 1).fill(0);
+  monthExpenses.forEach((tx) => {
+    const d = new Date(tx.date || Date.now());
+    const day = d.getDate();
+    if (day >= 1 && day <= daysInMonth) {
+      dailyTotals[day] += Number(tx.amount) || 0;
+    }
+  });
+
+  // Calculate cumulative spending up to today
+  let cumulative = 0;
+  const points = [];
+  for (let day = 1; day <= todayDate; day++) {
+    cumulative += dailyTotals[day];
+    const x = Math.max(2, (day / daysInMonth) * chartW);
+    const ratio = monthlyCap > 0 ? Math.min(1.05, cumulative / monthlyCap) : 0;
+    const y = Math.max(15, 85 - (ratio * 65));
+    points.push({ day, x, y, cumulative });
+  }
+
+  // Linear target guide coordinates for today
+  const targetRatio = todayDate / daysInMonth;
+  const targetX = targetRatio * chartW;
+  const targetY = 85 - (targetRatio * 65);
+
+  let curvePath = `M 0 85`;
+  let areaPath = `M 0 85`;
+
+  if (points.length > 0) {
+    points.forEach((p, idx) => {
+      if (idx === 0) {
+        curvePath += ` L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+      } else {
+        const prev = points[idx - 1];
+        curvePath += ` Q ${prev.x.toFixed(1)} ${prev.y.toFixed(1)}, ${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+      }
+    });
+
+    const lastPoint = points[points.length - 1];
+    areaPath = `${curvePath} L ${lastPoint.x.toFixed(1)} 90 L 0 90 Z`;
+  } else {
+    curvePath = `M 0 85 L ${(chartW * 0.5).toFixed(1)} 70`;
+    areaPath = `M 0 85 L ${(chartW * 0.5).toFixed(1)} 70 L ${(chartW * 0.5).toFixed(1)} 90 L 0 90 Z`;
+  }
+
+  const todayPoint = points.length > 0 ? points[points.length - 1] : { x: targetX, y: targetY, cumulative: 0 };
+
+  return {
+    curvePath,
+    areaPath,
+    todayPoint,
+    totalSpent: cumulative,
+    daysInMonth,
+    todayDate,
+    monthName,
+    monthShort,
+    targetY,
+  };
+};
 
 export default function CalendarScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const [balance, setBalance] = useState(0);
-  const [selectedDay, setSelectedDay] = useState(new Date().getDate().toString());
+  const [totalIncome, setTotalIncome] = useState(0);
+  const [totalExpense, setTotalExpense] = useState(0);
+  const [transactions, setTransactions] = useState([]);
+  const [budgetCap, setBudgetCap] = useState(240000);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [weekOffset, setWeekOffset] = useState(0);
   const [bills, setBills] = useState([]);
-  const [showAdvisor, setShowAdvisor] = useState(false);
-  const [activeNavTab, setActiveNavTab] = useState('Calendar');
+  const [showAdvisor, setShowAdvisor] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadData = async () => {
+    try {
+      const [summaryRes, txRes, budgetRes] = await Promise.all([
+        transactionService.getSummary().catch(() => null),
+        transactionService.getTransactions().catch(() => null),
+        budgetService.getBudgets().catch(() => null),
+      ]);
+
+      if (summaryRes) {
+        setBalance(Number(summaryRes.balance || 0));
+        setTotalIncome(Number(summaryRes.totalIncome || 0));
+        setTotalExpense(Number(summaryRes.totalExpense || 0));
+      }
+
+      if (txRes && Array.isArray(txRes)) {
+        setTransactions(txRes);
+      }
+
+      if (budgetRes && budgetRes.totalBudget) {
+        setBudgetCap(Number(budgetRes.totalBudget) || 240000);
+      }
+
+      // Populate detected / recurring bills
+      setBills([
+        {
+          id: 'bill-1',
+          title: 'Dialog Home Broadband',
+          amount: 'Rs. 3,490.00',
+          rawAmount: 3490,
+          category: 'Utilities',
+          icon: 'wifi-outline',
+          iconBg: '#F3E8FF',
+          iconColor: '#9333EA',
+          isActionable: true,
+          actionText: 'Pay Early',
+          status: 'Due Soon',
+          statusBg: '#FEF3C7',
+          statusColor: '#D97706',
+        },
+        {
+          id: 'bill-2',
+          title: 'CEB Electricity Bill',
+          amount: 'Rs. 8,250.00',
+          rawAmount: 8250,
+          category: 'Utilities',
+          icon: 'flash-outline',
+          iconBg: '#FEF3C7',
+          iconColor: '#D97706',
+          isActionable: false,
+          status: 'Auto-Debit 28th',
+          statusBg: '#DCFCE7',
+          statusColor: '#16A34A',
+        },
+        {
+          id: 'bill-3',
+          title: 'Netflix Premium Subscription',
+          amount: 'Rs. 2,200.00',
+          rawAmount: 2200,
+          category: 'Entertainment',
+          icon: 'film-outline',
+          iconBg: '#FEE2E2',
+          iconColor: '#EF4444',
+          isActionable: false,
+          status: 'Subscribed',
+          statusBg: '#E0F2FE',
+          statusColor: '#0284C7',
+        },
+      ]);
+    } catch (e) {
+      console.log('Error loading calendar data:', e.message);
+    }
+  };
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const res = await api.get('/transactions/summary').catch(() => null);
-        if (res?.data && res.data.balance !== undefined) {
-          setBalance(Number(res.data.balance || 0));
-        }
-      } catch (e) {
-        // quiet fallback
-      }
-    };
     loadData();
   }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, []);
+
+  // Compute daily safe buffer metrics
+  const today = new Date();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const daysRemaining = Math.max(1, daysInMonth - today.getDate() + 1);
+  const remainingBudget = Math.max(0, budgetCap - totalExpense);
+  const safeDailySpend = Math.round(remainingBudget / daysRemaining);
+
+  // Dynamic 7-day week strip
+  const daysStrip = getDynamicWeekStrip(weekOffset, transactions, safeDailySpend);
+
+  // Filter transactions for the selected calendar date
+  const selectedDayTransactions = transactions.filter((tx) =>
+    isSameCalendarDay(tx.date, selectedDate)
+  );
+
+  const selectedDayOutflow = selectedDayTransactions
+    .filter((tx) => tx.type === 'expense')
+    .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+
+  const isDailyOnTrack = selectedDayOutflow <= safeDailySpend;
+
+  // Velocity Chart data
+  const velocityChart = generateVelocityChartData(transactions, budgetCap);
+
+  const handleShiftWeek = (delta) => {
+    setWeekOffset((prev) => {
+      const nextOffset = prev + delta;
+      const newBase = new Date();
+      newBase.setDate(newBase.getDate() + (nextOffset * 7));
+      setSelectedDate(newBase);
+      return nextOffset;
+    });
+  };
+
+  const handleBillAction = (bill) => {
+    navigation?.navigate('AddExpense', {
+      prefillMerchant: bill.title,
+      prefillAmount: bill.rawAmount,
+      prefillCategory: bill.category,
+    });
+  };
 
   return (
     <View style={styles.rootContainer}>
@@ -72,6 +322,9 @@ export default function CalendarScreen({ navigation }) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} />
+        }
       >
         {/* Sky-Blue Header Gradient Banner */}
         <LinearGradient
@@ -110,7 +363,9 @@ export default function CalendarScreen({ navigation }) {
               </Text>
             </View>
 
-            <Text style={styles.salaryCycleText}>Salary cycle: 25th Oct - 24th Nov</Text>
+            <Text style={styles.salaryCycleText}>
+              Salary cycle: 25th {velocityChart.monthShort} - 24th {new Date(today.getFullYear(), today.getMonth() + 1, 1).toLocaleString('en-US', { month: 'short' })}
+            </Text>
           </View>
 
           {/* 4 Quick Circular Action Buttons */}
@@ -137,14 +392,22 @@ export default function CalendarScreen({ navigation }) {
               <Text style={styles.actionLabel}>Expense</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionBtnWrapper} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.actionBtnWrapper}
+              activeOpacity={0.85}
+              onPress={() => navigation?.navigate('Transactions')}
+            >
               <View style={styles.actionCircle}>
                 <Ionicons name="swap-horizontal-outline" size={20} color="#FFFFFF" />
               </View>
-              <Text style={styles.actionLabel}>Convert</Text>
+              <Text style={styles.actionLabel}>History</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionBtnWrapper} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.actionBtnWrapper}
+              activeOpacity={0.85}
+              onPress={() => navigation?.navigate('Settings')}
+            >
               <View style={styles.actionCircle}>
                 <Ionicons name="ellipsis-horizontal-outline" size={20} color="#FFFFFF" />
               </View>
@@ -164,31 +427,43 @@ export default function CalendarScreen({ navigation }) {
             <View style={{ flex: 1 }}>
               <Text style={styles.bufferLabel}>DAILY SAFE SPEND BUFFER</Text>
               <Text style={styles.bufferValue}>
-                Rs. 5,880 <Text style={styles.bufferSub}>/ day</Text>
+                Rs. {safeDailySpend.toLocaleString()} <Text style={styles.bufferSub}>/ day</Text>
               </Text>
             </View>
 
-            <View style={styles.onTrackPill}>
-              <View style={styles.greenDot} />
-              <Text style={styles.onTrackText}>On Track</Text>
+            <View style={[styles.onTrackPill, !isDailyOnTrack && { backgroundColor: '#FEF3C7' }]}>
+              <View style={[styles.greenDot, !isDailyOnTrack && { backgroundColor: '#D97706' }]} />
+              <Text style={[styles.onTrackText, !isDailyOnTrack && { color: '#D97706' }]}>
+                {isDailyOnTrack ? 'On Track' : 'High Outflow'}
+              </Text>
             </View>
           </View>
 
           {/* Month Selector & Legend Header */}
           <View style={styles.monthHeaderRow}>
             <View style={styles.monthTitleRow}>
-              <Text style={styles.monthTitle}>October 2024</Text>
-              <TouchableOpacity activeOpacity={0.7} style={{ marginLeft: 6 }}>
-                <Ionicons name="chevron-back" size={14} color="#64748B" />
+              <Text style={styles.monthTitle}>
+                {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                style={{ marginLeft: 8, padding: 4 }}
+                onPress={() => handleShiftWeek(-1)}
+              >
+                <Ionicons name="chevron-back" size={16} color="#64748B" />
               </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.7} style={{ marginLeft: 4 }}>
-                <Ionicons name="chevron-forward" size={14} color="#64748B" />
+              <TouchableOpacity
+                activeOpacity={0.7}
+                style={{ marginLeft: 4, padding: 4 }}
+                onPress={() => handleShiftWeek(1)}
+              >
+                <Ionicons name="chevron-forward" size={16} color="#64748B" />
               </TouchableOpacity>
             </View>
 
             <View style={styles.legendRow}>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#16A34A' }]} />
+                <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
                 <Text style={styles.legendText}>Low</Text>
               </View>
               <View style={styles.legendItem}>
@@ -208,13 +483,13 @@ export default function CalendarScreen({ navigation }) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.dateStripRow}
           >
-            {DAYS_STRIP.map((item) => {
-              const isSelected = selectedDay === item.date;
+            {daysStrip.map((item) => {
+              const isSelected = isSameCalendarDay(selectedDate, item.fullDate);
               return (
                 <TouchableOpacity
-                  key={item.date}
+                  key={item.fullDate.toISOString()}
                   style={[styles.dateCard, isSelected && styles.dateCardActive]}
-                  onPress={() => setSelectedDay(item.date)}
+                  onPress={() => setSelectedDate(item.fullDate)}
                   activeOpacity={0.85}
                 >
                   {isSelected && <View style={styles.cornerActiveDot} />}
@@ -240,15 +515,74 @@ export default function CalendarScreen({ navigation }) {
           <View style={styles.outflowBanner}>
             <View style={styles.outflowLeft}>
               <Ionicons name="calendar-outline" size={16} color="#0284C7" style={{ marginRight: 8 }} />
-              <Text style={styles.outflowText}>Day {selectedDay} Recorded Outflow</Text>
+              <Text style={styles.outflowText}>
+                {selectedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} Recorded Outflow
+              </Text>
             </View>
-            <Text style={styles.outflowAmount}>Rs. 0.00</Text>
+            <Text style={styles.outflowAmount}>
+              Rs. {selectedDayOutflow.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Text>
           </View>
 
-          {/* October Velocity Chart Card */}
+          {/* Selected Day Transactions Breakdown */}
+          {selectedDayTransactions.length > 0 ? (
+            <View style={styles.dayTxContainer}>
+              <View style={styles.dayTxHeader}>
+                <Text style={styles.dayTxHeaderTitle}>
+                  Activity on {selectedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                </Text>
+                <Text style={styles.dayTxCountBadge}>{selectedDayTransactions.length} recorded</Text>
+              </View>
+
+              <View style={styles.dayTxList}>
+                {selectedDayTransactions.map((tx) => (
+                  <View key={tx._id || tx.id} style={styles.dayTxItem}>
+                    <View style={[
+                      styles.dayTxIconCircle,
+                      { backgroundColor: tx.type === 'income' ? '#DCFCE7' : '#EFF6FF' }
+                    ]}>
+                      <Ionicons
+                        name={tx.type === 'income' ? 'arrow-down-outline' : 'arrow-up-outline'}
+                        size={16}
+                        color={tx.type === 'income' ? '#16A34A' : '#2563EB'}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.dayTxTitle}>{tx.title || 'Transaction'}</Text>
+                      <Text style={styles.dayTxSub}>
+                        {tx.category || 'General'} • {tx.paymentMethod || 'Default'}
+                      </Text>
+                    </View>
+                    <Text style={[
+                      styles.dayTxAmount,
+                      tx.type === 'income' ? { color: '#16A34A' } : { color: '#0F172A' }
+                    ]}>
+                      {tx.type === 'income' ? '+' : '-'}Rs. {Number(tx.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.emptyDayNotice}>
+              <Ionicons name="receipt-outline" size={16} color="#94A3B8" style={{ marginRight: 6 }} />
+              <Text style={styles.emptyDayNoticeText}>No transactions recorded on this day.</Text>
+            </View>
+          )}
+
+          {/* Monthly Velocity Chart Card */}
           <View style={styles.cardContainer}>
-            <Text style={styles.cardTitle}>October Velocity</Text>
-            <Text style={styles.cardSubtitle}>Cumulative spending trajectory vs budget</Text>
+            <View style={styles.velocityCardHeader}>
+              <View>
+                <Text style={styles.cardTitle}>{velocityChart.monthName} Velocity</Text>
+                <Text style={styles.cardSubtitle}>Cumulative spending trajectory vs budget</Text>
+              </View>
+              <View style={styles.velocityBadge}>
+                <Text style={styles.velocityBadgeText}>
+                  Rs. {velocityChart.totalSpent.toLocaleString()} spent
+                </Text>
+              </View>
+            </View>
 
             {/* SVG Trend Chart */}
             <View style={styles.chartWrapper}>
@@ -263,38 +597,38 @@ export default function CalendarScreen({ navigation }) {
                 {/* Dotted Target Budget Line */}
                 <Line
                   x1="0"
-                  y1="35"
+                  y1="85"
                   x2={width - 76}
-                  y2="35"
+                  y2="20"
                   stroke="#CBD5E1"
-                  strokeWidth="1"
+                  strokeWidth="1.5"
                   strokeDasharray="4 4"
                 />
 
-                {/* Shaded Area Below Curve */}
+                {/* Shaded Area Below Real Cumulative Curve */}
                 <Path
-                  d={`M 0 70 Q ${(width - 76) * 0.5} 55, ${(width - 76)} 20 L ${(width - 76)} 90 L 0 90 Z`}
+                  d={velocityChart.areaPath}
                   fill="url(#curveGrad)"
                 />
 
-                {/* Trend Curve Line */}
+                {/* Real Cumulative Trend Curve Line */}
                 <Path
-                  d={`M 0 70 Q ${(width - 76) * 0.5} 55, ${(width - 76)} 20`}
+                  d={velocityChart.curvePath}
                   fill="none"
                   stroke="#2563EB"
                   strokeWidth="3.5"
                 />
 
-                {/* Active Node at Today */}
-                <Circle cx={(width - 76) * 0.53} cy="53" r="6" fill="#2563EB" />
-                <Circle cx={(width - 76) * 0.53} cy="53" r="10" fill="#2563EB" opacity="0.25" />
+                {/* Active Node at Current Day */}
+                <Circle cx={velocityChart.todayPoint.x} cy={velocityChart.todayPoint.y} r="6" fill="#2563EB" />
+                <Circle cx={velocityChart.todayPoint.x} cy={velocityChart.todayPoint.y} r="11" fill="#2563EB" opacity="0.22" />
               </Svg>
 
               {/* X-Axis Labels */}
               <View style={styles.xAxisRow}>
-                <Text style={styles.xAxisText}>Oct 1 (Rs. 0)</Text>
-                <Text style={styles.xAxisActive}>Today (Oct 17)</Text>
-                <Text style={styles.xAxisText}>Oct 31 (Rs. 240k Cap)</Text>
+                <Text style={styles.xAxisText}>1st (Rs. 0)</Text>
+                <Text style={styles.xAxisActive}>Today ({velocityChart.monthShort} {velocityChart.todayDate})</Text>
+                <Text style={styles.xAxisText}>{velocityChart.daysInMonth}th (Rs. {(budgetCap / 1000).toFixed(0)}k Cap)</Text>
               </View>
             </View>
           </View>
@@ -335,7 +669,11 @@ export default function CalendarScreen({ navigation }) {
                     </Text>
 
                     {bill.isActionable ? (
-                      <TouchableOpacity style={styles.payEarlyBtn} activeOpacity={0.85}>
+                      <TouchableOpacity
+                        style={styles.payEarlyBtn}
+                        activeOpacity={0.85}
+                        onPress={() => handleBillAction(bill)}
+                      >
                         <Text style={styles.payEarlyText}>{bill.actionText}</Text>
                       </TouchableOpacity>
                     ) : (
@@ -364,7 +702,9 @@ export default function CalendarScreen({ navigation }) {
                   <Ionicons name="sparkles" size={13} color="#2563EB" />
                 </View>
                 <Text style={styles.advisorBody}>
-                  Your rent due on Oct 25 is fully secured with 68% remaining disposable cushion.
+                  {isDailyOnTrack
+                    ? `Your spending is on track! Rs. ${remainingBudget.toLocaleString()} disposable cushion remaining for the next ${daysRemaining} days.`
+                    : `Today's outflow (Rs. ${selectedDayOutflow.toLocaleString()}) exceeded your daily safe spend buffer (Rs. ${safeDailySpend.toLocaleString()}).`}
                 </Text>
               </View>
 
@@ -953,5 +1293,111 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
     paddingHorizontal: 16,
+  },
+
+  /* Velocity Header & Badge */
+  velocityCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  velocityBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  velocityBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+
+  /* Selected Day Transactions Activity */
+  dayTxContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  dayTxHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  dayTxHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  dayTxCountBadge: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  dayTxList: {
+    gap: 10,
+  },
+  dayTxItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  dayTxIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  dayTxTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  dayTxSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+  },
+  dayTxAmount: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  emptyDayNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  emptyDayNoticeText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
   },
 });
