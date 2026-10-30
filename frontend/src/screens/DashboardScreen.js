@@ -23,6 +23,7 @@ import api from '../services/api';
 import budgetService from '../services/budgetService';
 import { AuthContext } from '../context/AuthContext';
 import FloatingBottomNav from '../components/FloatingBottomNav';
+import SpendingHeatmap from '../components/SpendingHeatmap';
 
 const { width } = Dimensions.get('window');
 
@@ -137,6 +138,7 @@ export default function DashboardScreen({ navigation }) {
     balance: 0,
     totalIncome: 0,
     totalExpense: 0,
+    heatmapData: {},
   });
   const [recentTx, setRecentTx] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -164,10 +166,23 @@ export default function DashboardScreen({ navigation }) {
         budgetService.getBudgets().catch(() => null),
       ]);
       if (summaryRes?.data && summaryRes.data.balance !== undefined) {
+        // Collect heatmap data from summary endpoint, with fallback computation from transaction list
+        let finalHeatmap = summaryRes.data.heatmapData || {};
+        if (Object.keys(finalHeatmap).length === 0 && Array.isArray(txRes?.data)) {
+          finalHeatmap = {};
+          txRes.data.forEach((tx) => {
+            if (tx.type === 'expense') {
+              const dStr = new Date(tx.date || Date.now()).toISOString().split('T')[0];
+              finalHeatmap[dStr] = (finalHeatmap[dStr] || 0) + (Number(tx.amount) || 0);
+            }
+          });
+        }
+
         setSummary({
           balance: Number(summaryRes.data.balance || 0),
           totalIncome: Number(summaryRes.data.totalIncome || 0),
           totalExpense: Number(summaryRes.data.totalExpense || 0),
+          heatmapData: finalHeatmap,
         });
       }
       if (budgetRes && budgetRes.budgets) {
@@ -668,6 +683,12 @@ export default function DashboardScreen({ navigation }) {
               </View>
             )}
           </View>
+
+          {/* GitHub-Style 52-Week Spending Heatmap */}
+          <SpendingHeatmap
+            heatmapData={summary.heatmapData}
+            currency="Rs."
+          />
 
           {/* Recent Transactions Header */}
           <View style={styles.sectionHeaderRow}>

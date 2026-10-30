@@ -1,25 +1,3 @@
-import React, { useState, useEffect, useContext } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  Image,
-  SafeAreaView,
-  StatusBar,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-  Platform,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Circle, Line } from 'react-native-svg';
-import api from '../services/api';
-import { AuthContext } from '../context/AuthContext';
-import FloatingBottomNav from '../components/FloatingBottomNav';
-
-const { width } = Dimensions.get('window');
-
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   StyleSheet,
@@ -97,7 +75,126 @@ const getDynamicWeekStrip = (weekOffset = 0, txList = [], safeDailyBuffer = 5000
   return strip;
 };
 
-// Generate spending velocity curve coordinates from real transaction data
+// Predictive Cash Flow & End-of-Month Forecast Engine
+const computeCashFlowForecast = ({
+  currentBalance = 0,
+  totalIncome = 0,
+  totalExpense = 0,
+  transactions = [],
+  budgetCap = 240000,
+}) => {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const todayDate = now.getDate();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const remainingDays = Math.max(0, daysInMonth - todayDate);
+  const daysPassed = Math.max(1, todayDate);
+
+  // Month expenses
+  const currentMonthExpenses = (transactions || []).filter((tx) => {
+    if (tx.type !== 'expense') return false;
+    const d = new Date(tx.date || Date.now());
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  const monthExpenseSum = currentMonthExpenses.reduce(
+    (acc, curr) => acc + (Number(curr.amount) || 0),
+    0
+  ) || totalExpense;
+
+  // Compute weighted daily burn rate (70% current month + 30% overall historical)
+  const currentMonthBurn = monthExpenseSum / daysPassed;
+  const allExpenseTx = (transactions || []).filter((t) => t.type === 'expense');
+  let historicalDailySpend = currentMonthBurn;
+
+  if (allExpenseTx.length > 0) {
+    const totalAllSpend = allExpenseTx.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const dates = allExpenseTx.map((t) => new Date(t.date || Date.now()).getTime());
+    const minDate = Math.min(...dates);
+    const maxDate = Math.max(...dates);
+    const spanDays = Math.max(1, Math.round((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1);
+    historicalDailySpend = totalAllSpend / spanDays;
+  }
+
+  const dailyBurnRate = Math.round(
+    currentMonthExpenses.length >= 2
+      ? currentMonthBurn * 0.75 + historicalDailySpend * 0.25
+      : currentMonthBurn || 2800
+  );
+
+  // Projected Outflow for the rest of the month
+  const projectedFutureSpend = dailyBurnRate * remainingDays;
+  const projectedTotalMonthSpend = monthExpenseSum + projectedFutureSpend;
+
+  // Projected End-of-Month Balance (Income - Total Month Spend or Current Balance - Future Spend)
+  const projectedEndOfMonthBalance = currentBalance - projectedFutureSpend;
+
+  // Budget Variance
+  const projectedBudgetVariance = budgetCap - projectedTotalMonthSpend;
+  const isProjectedDeficit = projectedEndOfMonthBalance < 0;
+  const isOverBudgetProjected = projectedTotalMonthSpend > budgetCap;
+
+  // Days until cash depletion
+  let runwayDays = 999;
+  let runwayExhaustionDate = null;
+  if (dailyBurnRate > 0 && currentBalance > 0) {
+    runwayDays = Math.max(0, Math.floor(currentBalance / dailyBurnRate));
+    if (runwayDays < remainingDays) {
+      const exhaust = new Date(now);
+      exhaust.setDate(now.getDate() + runwayDays);
+      runwayExhaustionDate = exhaust.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+  }
+
+  // Safe daily spend to maintain positive balance and budget
+  const safeDailyBudgetSpend = Math.max(
+    0,
+    Math.round(Math.max(0, budgetCap - monthExpenseSum) / Math.max(1, remainingDays))
+  );
+
+  // Savings trajectory percentage
+  const projectedSavingsRate = totalIncome > 0
+    ? Math.round(((totalIncome - projectedTotalMonthSpend) / totalIncome) * 100)
+    : 0;
+
+  // AI Narrative Insight
+  let aiForecastInsight = '';
+  let insightType = 'positive';
+
+  if (isProjectedDeficit) {
+    insightType = 'warning';
+    aiForecastInsight = `At your current burn rate (Rs. ${dailyBurnRate.toLocaleString()}/day), cash reserves may deplete by ${runwayExhaustionDate || 'month-end'}. Consider dialing back discretionary spending.`;
+  } else if (isOverBudgetProjected) {
+    insightType = 'warning';
+    aiForecastInsight = `Projected spend of Rs. ${projectedTotalMonthSpend.toLocaleString()} will exceed your monthly cap by Rs. ${Math.abs(projectedBudgetVariance).toLocaleString()}. Keep daily outflow under Rs. ${safeDailyBudgetSpend.toLocaleString()} to stay on target.`;
+  } else {
+    insightType = 'positive';
+    aiForecastInsight = `Spending pace is sustainable! On track for a projected surplus of Rs. ${Math.round(projectedEndOfMonthBalance).toLocaleString()} by month-end with a healthy ${projectedSavingsRate}% savings cushion.`;
+  }
+
+  return {
+    dailyBurnRate,
+    remainingDays,
+    daysPassed,
+    daysInMonth,
+    monthExpenseSum,
+    projectedFutureSpend,
+    projectedTotalMonthSpend,
+    projectedEndOfMonthBalance,
+    projectedBudgetVariance,
+    isProjectedDeficit,
+    isOverBudgetProjected,
+    runwayDays,
+    runwayExhaustionDate,
+    safeDailyBudgetSpend,
+    projectedSavingsRate,
+    aiForecastInsight,
+    insightType,
+  };
+};
+
+// Generate spending velocity curve coordinates with both Real and Projected trajectories
 const generateVelocityChartData = (txList = [], monthlyCap = 240000, chartW = width - 76, chartH = 100) => {
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -124,7 +221,7 @@ const generateVelocityChartData = (txList = [], monthlyCap = 240000, chartW = wi
     }
   });
 
-  // Calculate cumulative spending up to today
+  // Calculate cumulative real spending up to today
   let cumulative = 0;
   const points = [];
   for (let day = 1; day <= todayDate; day++) {
@@ -162,10 +259,40 @@ const generateVelocityChartData = (txList = [], monthlyCap = 240000, chartW = wi
 
   const todayPoint = points.length > 0 ? points[points.length - 1] : { x: targetX, y: targetY, cumulative: 0 };
 
+  // Calculate Projected Future Trajectory Curve from Today to End of Month
+  const daysPassed = Math.max(1, todayDate);
+  const dailyBurnRate = cumulative > 0 ? cumulative / daysPassed : monthlyCap / daysInMonth;
+
+  const projectedPoints = [todayPoint];
+  let projectedCumulative = cumulative;
+
+  for (let day = todayDate + 1; day <= daysInMonth; day++) {
+    projectedCumulative += dailyBurnRate;
+    const x = Math.max(2, (day / daysInMonth) * chartW);
+    const ratio = monthlyCap > 0 ? Math.min(1.2, projectedCumulative / monthlyCap) : 0;
+    const y = Math.max(10, 85 - (ratio * 65));
+    projectedPoints.push({ day, x, y, projectedCumulative });
+  }
+
+  let projectedPath = `M ${todayPoint.x.toFixed(1)} ${todayPoint.y.toFixed(1)}`;
+  if (projectedPoints.length > 1) {
+    for (let i = 1; i < projectedPoints.length; i++) {
+      const prev = projectedPoints[i - 1];
+      const curr = projectedPoints[i];
+      projectedPath += ` Q ${prev.x.toFixed(1)} ${prev.y.toFixed(1)}, ${curr.x.toFixed(1)} ${curr.y.toFixed(1)}`;
+    }
+  }
+
+  const endPoint = projectedPoints[projectedPoints.length - 1];
+
   return {
     curvePath,
     areaPath,
+    projectedPath,
     todayPoint,
+    endPoint,
+    dailyBurnRate,
+    projectedTotalSpend: projectedCumulative,
     totalSpent: cumulative,
     daysInMonth,
     todayDate,
@@ -187,6 +314,7 @@ export default function CalendarScreen({ navigation }) {
   const [bills, setBills] = useState([]);
   const [showAdvisor, setShowAdvisor] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [forecastMode, setForecastMode] = useState('forecast'); // 'forecast' | 'live'
 
   const loadData = async () => {
     try {
@@ -295,6 +423,15 @@ export default function CalendarScreen({ navigation }) {
   // Velocity Chart data
   const velocityChart = generateVelocityChartData(transactions, budgetCap);
 
+  // Predictive Cash Flow Forecast
+  const forecast = computeCashFlowForecast({
+    currentBalance: balance,
+    totalIncome,
+    totalExpense,
+    transactions,
+    budgetCap,
+  });
+
   const handleShiftWeek = (delta) => {
     setWeekOffset((prev) => {
       const nextOffset = prev + delta;
@@ -351,21 +488,71 @@ export default function CalendarScreen({ navigation }) {
 
           {/* AI Forecast & Balance Display */}
           <View style={styles.forecastSection}>
-            <View style={styles.forecastPill}>
+            <TouchableOpacity
+              style={styles.forecastPill}
+              activeOpacity={0.8}
+              onPress={() => setForecastMode((prev) => (prev === 'forecast' ? 'live' : 'forecast'))}
+            >
               <Text style={styles.flagText}>LK</Text>
-              <Text style={styles.forecastText}>AI Forecast • End of Month Balance</Text>
-            </View>
+              <Text style={styles.forecastText}>
+                {forecastMode === 'forecast' ? '✨ AI Forecast • Projected Month-End' : '💳 Current Live Balance'}
+              </Text>
+              <Ionicons
+                name="swap-horizontal"
+                size={12}
+                color="rgba(255, 255, 255, 0.85)"
+                style={{ marginLeft: 6 }}
+              />
+            </TouchableOpacity>
 
-            <View style={styles.balanceAmountRow}>
+            <TouchableOpacity
+              style={styles.balanceAmountRow}
+              activeOpacity={0.8}
+              onPress={() => setForecastMode((prev) => (prev === 'forecast' ? 'live' : 'forecast'))}
+            >
               <Text style={styles.currencyPrefix}>Rs. </Text>
               <Text style={styles.balanceMainText}>
-                {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {forecastMode === 'forecast'
+                  ? Math.round(forecast.projectedEndOfMonthBalance).toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })
+                  : balance.toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
               </Text>
-            </View>
+            </TouchableOpacity>
 
-            <Text style={styles.salaryCycleText}>
-              Salary cycle: 25th {velocityChart.monthShort} - 24th {new Date(today.getFullYear(), today.getMonth() + 1, 1).toLocaleString('en-US', { month: 'short' })}
-            </Text>
+            <View style={styles.forecastSubPillRow}>
+              {forecastMode === 'forecast' ? (
+                <View
+                  style={[
+                    styles.forecastStatusBadge,
+                    forecast.isProjectedDeficit ? styles.badgeDeficit : styles.badgeSurplus,
+                  ]}
+                >
+                  <Ionicons
+                    name={forecast.isProjectedDeficit ? 'warning-outline' : 'trending-up-outline'}
+                    size={11}
+                    color="#FFFFFF"
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={styles.forecastBadgeText}>
+                    {forecast.isProjectedDeficit
+                      ? `Risk: Deficit of Rs. ${Math.abs(Math.round(forecast.projectedEndOfMonthBalance)).toLocaleString()}`
+                      : `Surplus Trajectory • Live: Rs. ${balance.toLocaleString()}`}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.salaryCycleText}>
+                  Salary cycle: 25th {velocityChart.monthShort} - 24th{' '}
+                  {new Date(today.getFullYear(), today.getMonth() + 1, 1).toLocaleString('en-US', {
+                    month: 'short',
+                  })}
+                </Text>
+              )}
+            </View>
           </View>
 
           {/* 4 Quick Circular Action Buttons */}
@@ -619,9 +806,25 @@ export default function CalendarScreen({ navigation }) {
                   strokeWidth="3.5"
                 />
 
+                {/* AI Projected Future Path from Today to Month-End */}
+                {velocityChart.projectedPath ? (
+                  <Path
+                    d={velocityChart.projectedPath}
+                    fill="none"
+                    stroke="#38BDF8"
+                    strokeWidth="2.5"
+                    strokeDasharray="5 4"
+                  />
+                ) : null}
+
                 {/* Active Node at Current Day */}
                 <Circle cx={velocityChart.todayPoint.x} cy={velocityChart.todayPoint.y} r="6" fill="#2563EB" />
                 <Circle cx={velocityChart.todayPoint.x} cy={velocityChart.todayPoint.y} r="11" fill="#2563EB" opacity="0.22" />
+
+                {/* Projected End-of-Month Target Node */}
+                {velocityChart.endPoint ? (
+                  <Circle cx={velocityChart.endPoint.x} cy={velocityChart.endPoint.y} r="5" fill="#38BDF8" />
+                ) : null}
               </Svg>
 
               {/* X-Axis Labels */}
@@ -630,7 +833,119 @@ export default function CalendarScreen({ navigation }) {
                 <Text style={styles.xAxisActive}>Today ({velocityChart.monthShort} {velocityChart.todayDate})</Text>
                 <Text style={styles.xAxisText}>{velocityChart.daysInMonth}th (Rs. {(budgetCap / 1000).toFixed(0)}k Cap)</Text>
               </View>
+
+              {/* Chart Legend */}
+              <View style={styles.chartLegendRow}>
+                <View style={styles.chartLegendItem}>
+                  <View style={[styles.chartLegendLine, { backgroundColor: '#2563EB' }]} />
+                  <Text style={styles.chartLegendText}>Real Cumulative</Text>
+                </View>
+                <View style={styles.chartLegendItem}>
+                  <View style={[styles.chartLegendLine, { backgroundColor: '#38BDF8', borderStyle: 'dashed' }]} />
+                  <Text style={styles.chartLegendText}>AI Projection</Text>
+                </View>
+                <View style={styles.chartLegendItem}>
+                  <View style={[styles.chartLegendLine, { backgroundColor: '#CBD5E1' }]} />
+                  <Text style={styles.chartLegendText}>Budget Limit</Text>
+                </View>
+              </View>
             </View>
+          </View>
+
+          {/* Predictive Cash Flow Intelligence Card */}
+          <View style={styles.forecastCard}>
+            <LinearGradient
+              colors={['#1E293B', '#0F172A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.forecastCardGradient}
+            >
+              <View style={styles.forecastCardHeader}>
+                <View style={styles.forecastIconCircle}>
+                  <Ionicons name="sparkles" size={16} color="#38BDF8" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.forecastCardTitle}>AI Predictive Cash Flow</Text>
+                  <Text style={styles.forecastCardSubtitle}>
+                    Linear burn model • {forecast.remainingDays} days remaining in cycle
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.forecastStatusPill,
+                    forecast.isProjectedDeficit
+                      ? styles.forecastStatusPillAlert
+                      : styles.forecastStatusPillSafe,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.forecastStatusPillText,
+                      forecast.isProjectedDeficit
+                        ? { color: '#EF4444' }
+                        : { color: '#10B981' },
+                    ]}
+                  >
+                    {forecast.isProjectedDeficit ? 'Deficit Risk' : 'Healthy Runway'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* 3 Metric Columns */}
+              <View style={styles.forecastMetricsGrid}>
+                <View style={styles.forecastMetricCol}>
+                  <Text style={styles.forecastMetricLabel}>Daily Burn Rate</Text>
+                  <Text style={styles.forecastMetricValue}>
+                    Rs. {forecast.dailyBurnRate.toLocaleString()}
+                  </Text>
+                  <Text style={styles.forecastMetricSub}>
+                    {forecast.dailyBurnRate <= safeDailySpend ? '🌱 Under safe buffer' : '⚠️ Above safe buffer'}
+                  </Text>
+                </View>
+
+                <View style={styles.forecastMetricDivider} />
+
+                <View style={styles.forecastMetricCol}>
+                  <Text style={styles.forecastMetricLabel}>Projected Outflow</Text>
+                  <Text style={[styles.forecastMetricValue, { color: '#38BDF8' }]}>
+                    Rs. {Math.round(forecast.projectedTotalMonthSpend).toLocaleString()}
+                  </Text>
+                  <Text style={styles.forecastMetricSub}>
+                    Cap: Rs. {budgetCap.toLocaleString()}
+                  </Text>
+                </View>
+
+                <View style={styles.forecastMetricDivider} />
+
+                <View style={styles.forecastMetricCol}>
+                  <Text style={styles.forecastMetricLabel}>Est. Month-End Net</Text>
+                  <Text
+                    style={[
+                      styles.forecastMetricValue,
+                      { color: forecast.projectedEndOfMonthBalance >= 0 ? '#10B981' : '#EF4444' },
+                    ]}
+                  >
+                    {forecast.projectedEndOfMonthBalance >= 0 ? '+' : ''}Rs. {Math.round(forecast.projectedEndOfMonthBalance).toLocaleString()}
+                  </Text>
+                  <Text style={styles.forecastMetricSub}>
+                    {forecast.projectedEndOfMonthBalance >= 0 ? 'Surplus on 25th' : 'Overdraft warning'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Dynamic AI Narrative Advisory */}
+              <View style={styles.forecastAdvisorBox}>
+                <Ionicons
+                  name={forecast.isProjectedDeficit ? 'warning' : 'bulb'}
+                  size={16}
+                  color={forecast.isProjectedDeficit ? '#EF4444' : '#F59E0B'}
+                  style={{ marginRight: 8, marginTop: 1 }}
+                />
+                <Text style={styles.forecastAdvisorText}>
+                  {forecast.aiForecastInsight}
+                </Text>
+              </View>
+            </LinearGradient>
           </View>
 
           {/* Scheduled Recurring Bills */}
@@ -835,6 +1150,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.85)',
     fontWeight: '500',
+  },
+  forecastSubPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  forecastStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  badgeSurplus: {
+    backgroundColor: 'rgba(16, 185, 129, 0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.6)',
+  },
+  badgeDeficit: {
+    backgroundColor: 'rgba(239, 68, 68, 0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.65)',
+  },
+  forecastBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   /* Quick Actions Row */
@@ -1106,6 +1448,149 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#2563EB',
+  },
+  chartLegendRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 14,
+    gap: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    width: '100%',
+  },
+  chartLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chartLegendLine: {
+    width: 14,
+    height: 3,
+    borderRadius: 1.5,
+    marginRight: 5,
+  },
+  chartLegendText: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+
+  /* Predictive Cash Flow Intelligence Card */
+  forecastCard: {
+    borderRadius: 24,
+    marginBottom: 20,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  forecastCardGradient: {
+    padding: 18,
+    borderRadius: 24,
+  },
+  forecastCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  forecastIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  forecastCardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  forecastCardSubtitle: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  forecastStatusPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  forecastStatusPillSafe: {
+    backgroundColor: 'rgba(16, 185, 129, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+  },
+  forecastStatusPillAlert: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.5)',
+  },
+  forecastStatusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  forecastMetricsGrid: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 14,
+  },
+  forecastMetricCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  forecastMetricDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignSelf: 'center',
+  },
+  forecastMetricLabel: {
+    fontSize: 9.5,
+    color: '#94A3B8',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 3,
+  },
+  forecastMetricValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  forecastMetricSub: {
+    fontSize: 9,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  forecastAdvisorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.09)',
+  },
+  forecastAdvisorText: {
+    flex: 1,
+    fontSize: 11.5,
+    color: '#E2E8F0',
+    lineHeight: 17,
+    fontWeight: '500',
   },
 
   /* Bills Section */
