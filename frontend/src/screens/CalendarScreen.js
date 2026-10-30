@@ -1,25 +1,3 @@
-import React, { useState, useEffect, useContext } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  Image,
-  SafeAreaView,
-  StatusBar,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-  Platform,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Circle, Line } from 'react-native-svg';
-import api from '../services/api';
-import { AuthContext } from '../context/AuthContext';
-import FloatingBottomNav from '../components/FloatingBottomNav';
-
-const { width } = Dimensions.get('window');
-
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   StyleSheet,
