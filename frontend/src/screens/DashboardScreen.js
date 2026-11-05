@@ -24,6 +24,7 @@ import budgetService from '../services/budgetService';
 import { AuthContext } from '../context/AuthContext';
 import FloatingBottomNav from '../components/FloatingBottomNav';
 import SpendingHeatmap from '../components/SpendingHeatmap';
+import CurrencyConverterModal from '../components/CurrencyConverterModal';
 
 const { width } = Dimensions.get('window');
 
@@ -155,6 +156,7 @@ export default function DashboardScreen({ navigation }) {
   // Notification Popup State
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [showConvertModal, setShowConvertModal] = useState(false);
 
   const unreadCount = notifications.filter((n) => n.isUnread).length;
 
@@ -452,14 +454,22 @@ export default function DashboardScreen({ navigation }) {
               <Text style={styles.actionLabel}>Expense</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionBtnWrapper} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.actionBtnWrapper}
+              activeOpacity={0.85}
+              onPress={() => setShowConvertModal(true)}
+            >
               <View style={styles.actionCircle}>
                 <Ionicons name="swap-horizontal-outline" size={20} color="#FFFFFF" />
               </View>
               <Text style={styles.actionLabel}>Convert</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionBtnWrapper} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.actionBtnWrapper}
+              activeOpacity={0.85}
+              onPress={() => navigation?.navigate('Settings')}
+            >
               <View style={styles.actionCircle}>
                 <Ionicons name="ellipsis-horizontal-outline" size={20} color="#FFFFFF" />
               </View>
@@ -1243,6 +1253,15 @@ export default function DashboardScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Currency Converter Modal */}
+      <CurrencyConverterModal
+        visible={showConvertModal}
+        onClose={() => setShowConvertModal(false)}
+        navigation={navigation}
+        initialBase="USD"
+        initialTarget={user?.currency || 'LKR'}
+      />
     </SafeAreaView>
   </View>
   );
