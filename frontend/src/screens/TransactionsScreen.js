@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   StyleSheet,
   Text,
@@ -20,7 +20,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { AuthContext } from '../context/AuthContext';
 import transactionService from '../services/transactionService';
+import pdfService from '../services/pdfService';
 import FloatingBottomNav from '../components/FloatingBottomNav';
 
 const { width } = Dimensions.get('window');
@@ -180,6 +182,7 @@ const DEFAULT_GROUPS = [
 ];
 
 export default function TransactionsScreen({ navigation, route }) {
+  const { user } = useContext(AuthContext);
   const [groupedTx, setGroupedTx] = useState([]);
   const [summary, setSummary] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -194,7 +197,7 @@ export default function TransactionsScreen({ navigation, route }) {
 
   // Export Statement Modal States
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportFormat, setExportFormat] = useState('csv'); // 'csv' or 'txt'
+  const [exportFormat, setExportFormat] = useState('pdf'); // 'pdf' | 'csv' | 'txt'
   const [exportRange, setExportRange] = useState('all'); // 'all', 'this_month', 'last_30'
   const [exportType, setExportType] = useState('all'); // 'all', 'expense', 'income'
   const [isExporting, setIsExporting] = useState(false);
@@ -390,7 +393,29 @@ export default function TransactionsScreen({ navigation, route }) {
         csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
       }
 
-      if (exportFormat === 'csv') {
+      if (exportFormat === 'pdf') {
+        const allItems = groupedTx.flatMap((grp) => grp.items || []);
+        const mappedTx = allItems.map((item) => ({
+          title: item.title,
+          amount: parseFloat(String(item.amount || '0').replace(/[^0-9.-]/g, '')) || 0,
+          type: item.type || 'expense',
+          category: item.categoryTag || 'General',
+          paymentMethod: item.paymentMethod || 'Commercial Bank',
+          date: item.rawDate || new Date().toISOString(),
+          merchant: item.merchant || '',
+        }));
+
+        await pdfService.exportStatementPdf({
+          user,
+          summary,
+          transactions: mappedTx,
+          dateRange: exportRange,
+          exportType,
+          currency: 'Rs.',
+        });
+
+        setShowExportModal(false);
+      } else if (exportFormat === 'csv') {
         if (Platform.OS === 'web' && typeof document !== 'undefined') {
           const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
           const url = URL.createObjectURL(blob);
@@ -941,6 +966,45 @@ export default function TransactionsScreen({ navigation, route }) {
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.exportModalBody}>
               {/* 1. File Format Selection */}
               <Text style={styles.exportSectionTitle}>Select Export Format</Text>
+
+              {/* Featured Option: Branded PDF Statement */}
+              <TouchableOpacity
+                style={[styles.formatPdfCard, exportFormat === 'pdf' && styles.formatPdfCardActive]}
+                activeOpacity={0.85}
+                onPress={() => setExportFormat('pdf')}
+              >
+                <View style={styles.formatPdfRow}>
+                  <View style={[styles.formatIconCircle, exportFormat === 'pdf' && styles.formatIconActive]}>
+                    <Ionicons
+                      name="newspaper-outline"
+                      size={22}
+                      color={exportFormat === 'pdf' ? '#2563EB' : '#64748B'}
+                    />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.formatTitle, exportFormat === 'pdf' && styles.formatTitleActive]}>
+                        PDF Statement
+                      </Text>
+                      <View style={styles.pdfBadge}>
+                        <Ionicons name="sparkles" size={10} color="#FFFFFF" style={{ marginRight: 3 }} />
+                        <Text style={styles.pdfBadgeText}>OFFICIAL</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.formatSub}>
+                      Certified A4 report with summary metrics, category breakdown & itemized ledger
+                    </Text>
+                  </View>
+
+                  {exportFormat === 'pdf' && (
+                    <View style={styles.pdfCheckBadge}>
+                      <Ionicons name="checkmark-circle" size={20} color="#2563EB" />
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* Secondary Formats: CSV / Excel & Plain Text */}
               <View style={styles.formatSelectorRow}>
                 <TouchableOpacity
                   style={[styles.formatCard, exportFormat === 'csv' && styles.formatCardActive]}
@@ -1070,9 +1134,18 @@ export default function TransactionsScreen({ navigation, route }) {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <Ionicons name="share-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Ionicons
+                      name={exportFormat === 'pdf' ? 'newspaper-outline' : 'share-outline'}
+                      size={18}
+                      color="#FFFFFF"
+                      style={{ marginRight: 8 }}
+                    />
                     <Text style={styles.exportActionBtnText}>
-                      {exportFormat === 'csv' ? 'Export CSV Spreadsheet' : 'Export Statement Summary'}
+                      {exportFormat === 'pdf'
+                        ? 'Download Branded PDF Statement'
+                        : exportFormat === 'csv'
+                        ? 'Export CSV Spreadsheet'
+                        : 'Export Statement Summary'}
                     </Text>
                   </>
                 )}
@@ -1746,6 +1819,45 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     marginTop: 12,
     marginBottom: 8,
+  },
+  formatPdfCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+  },
+  formatPdfCardActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  formatPdfRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pdfBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  pdfBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  pdfCheckBadge: {
+    marginLeft: 10,
   },
   formatSelectorRow: {
     flexDirection: 'row',
