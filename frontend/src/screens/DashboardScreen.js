@@ -24,6 +24,7 @@ import budgetService from '../services/budgetService';
 import { AuthContext } from '../context/AuthContext';
 import FloatingBottomNav from '../components/FloatingBottomNav';
 import SpendingHeatmap from '../components/SpendingHeatmap';
+import CurrencyConverterModal from '../components/CurrencyConverterModal';
 
 const { width } = Dimensions.get('window');
 
@@ -155,6 +156,7 @@ export default function DashboardScreen({ navigation }) {
   // Notification Popup State
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [showConvertModal, setShowConvertModal] = useState(false);
 
   const unreadCount = notifications.filter((n) => n.isUnread).length;
 
@@ -452,14 +454,22 @@ export default function DashboardScreen({ navigation }) {
               <Text style={styles.actionLabel}>Expense</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionBtnWrapper} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.actionBtnWrapper}
+              activeOpacity={0.85}
+              onPress={() => setShowConvertModal(true)}
+            >
               <View style={styles.actionCircle}>
                 <Ionicons name="swap-horizontal-outline" size={20} color="#FFFFFF" />
               </View>
               <Text style={styles.actionLabel}>Convert</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionBtnWrapper} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.actionBtnWrapper}
+              activeOpacity={0.85}
+              onPress={() => navigation?.navigate('Settings')}
+            >
               <View style={styles.actionCircle}>
                 <Ionicons name="ellipsis-horizontal-outline" size={20} color="#FFFFFF" />
               </View>
@@ -745,7 +755,11 @@ export default function DashboardScreen({ navigation }) {
           </View>
 
           {/* Export Monthly Statement Banner */}
-          <View style={styles.exportCard}>
+          <TouchableOpacity
+            style={styles.exportCard}
+            activeOpacity={0.9}
+            onPress={() => navigation?.navigate('Transactions', { openExport: true })}
+          >
             <LinearGradient
               colors={['#1E293B', '#0F172A']}
               start={{ x: 0, y: 0 }}
@@ -753,19 +767,20 @@ export default function DashboardScreen({ navigation }) {
               style={styles.exportGradient}
             >
               <View style={styles.exportLeft}>
-                <Text style={styles.exportTitle}>Export Monthly Statement</Text>
-                <Text style={styles.exportSubtitle}>PDF & Excel sheets ready for October</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+                  <Text style={styles.exportTitle}>Export Monthly Statement</Text>
+                  <View style={styles.exportPdfPill}>
+                    <Text style={styles.exportPdfPillText}>PDF</Text>
+                  </View>
+                </View>
+                <Text style={styles.exportSubtitle}>Official A4 PDF & Excel reports ready for download</Text>
               </View>
 
-              <TouchableOpacity
-                style={styles.downloadCircleBtn}
-                activeOpacity={0.85}
-                onPress={() => navigation?.navigate('Transactions', { openExport: true })}
-              >
-                <Ionicons name="download-outline" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
+              <View style={styles.downloadCircleBtn}>
+                <Ionicons name="document-text-outline" size={20} color="#FFFFFF" />
+              </View>
             </LinearGradient>
-          </View>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -1238,6 +1253,15 @@ export default function DashboardScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Currency Converter Modal */}
+      <CurrencyConverterModal
+        visible={showConvertModal}
+        onClose={() => setShowConvertModal(false)}
+        navigation={navigation}
+        initialBase="USD"
+        initialTarget={user?.currency || 'LKR'}
+      />
     </SafeAreaView>
   </View>
   );
@@ -1692,6 +1716,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
     marginBottom: 4,
+  },
+  exportPdfPill: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  exportPdfPillText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   exportSubtitle: {
     fontSize: 12,
