@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,11 +12,13 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import FloatingBottomNav from '../components/FloatingBottomNav';
+import EditReceiptModal from '../components/EditReceiptModal';
 import aiService from '../services/aiService';
 import transactionService from '../services/transactionService';
 
@@ -26,6 +28,35 @@ export default function ScanReceiptScreen({ navigation }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const laserAnim = useRef(new Animated.Value(0)).current;
+
+  // Animated laser scanning effect loop
+  useEffect(() => {
+    let loop = null;
+    if (isScanning) {
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(laserAnim, {
+            toValue: 1,
+            duration: 1300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(laserAnim, {
+            toValue: 0,
+            duration: 1300,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      loop.start();
+    } else {
+      laserAnim.setValue(0);
+    }
+    return () => {
+      if (loop) loop.stop();
+    };
+  }, [isScanning]);
 
   // Extracted Receipt State
   const [extractedData, setExtractedData] = useState({
@@ -254,6 +285,44 @@ export default function ScanReceiptScreen({ navigation }) {
               </View>
             )}
 
+            {/* Laser Scanning Beam */}
+            {isScanning && (
+              <Animated.View
+                style={[
+                  styles.laserBeam,
+                  {
+                    transform: [
+                      {
+                        translateY: laserAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [10, 240],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={['transparent', '#38BDF8', '#60A5FA', 'transparent']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={styles.laserGradient}
+                />
+              </Animated.View>
+            )}
+
+            {/* Retake Floating Pill if image chosen */}
+            {selectedImage && !isScanning && (
+              <TouchableOpacity
+                style={styles.retakeFloatingPill}
+                activeOpacity={0.85}
+                onPress={captureWithCamera}
+              >
+                <Ionicons name="refresh-outline" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Text style={styles.retakeFloatingText}>Retake Photo</Text>
+              </TouchableOpacity>
+            )}
+
             {/* Top Floating Match Badge */}
             <View style={styles.viewportTopBadge}>
               <View style={styles.blueDot} />
@@ -307,6 +376,15 @@ export default function ScanReceiptScreen({ navigation }) {
                   <Text style={styles.locationText}>{extractedData.location}</Text>
                 </View>
               </View>
+
+              <TouchableOpacity
+                style={styles.editDataBtn}
+                activeOpacity={0.8}
+                onPress={() => setShowEditModal(true)}
+              >
+                <Ionicons name="pencil" size={13} color="#2563EB" style={{ marginRight: 4 }} />
+                <Text style={styles.editDataText}>Edit</Text>
+              </TouchableOpacity>
             </View>
 
             {/* 2x2 Grid Metrics */}
@@ -345,9 +423,9 @@ export default function ScanReceiptScreen({ navigation }) {
                 <Text style={styles.detectedTitle}>Detected Items ({extractedData.items.length})</Text>
                 <TouchableOpacity
                   activeOpacity={0.7}
-                  onPress={() => navigation?.navigate('AddExpense')}
+                  onPress={() => setShowEditModal(true)}
                 >
-                  <Text style={styles.editLinesText}>Edit in Manual</Text>
+                  <Text style={styles.editLinesText}>Edit / Add Items</Text>
                 </TouchableOpacity>
               </View>
 
@@ -425,6 +503,20 @@ export default function ScanReceiptScreen({ navigation }) {
             </LinearGradient>
           </TouchableOpacity>
         </ScrollView>
+
+        {/* Edit Scanned Data Modal */}
+        <EditReceiptModal
+          visible={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          initialData={extractedData}
+          onSave={(updated) => {
+            setExtractedData((prev) => ({
+              ...prev,
+              ...updated,
+            }));
+            setShowEditModal(false);
+          }}
+        />
 
         {/* Floating Bottom Navigation Bar */}
         <FloatingBottomNav currentScreen="" navigation={navigation} />
@@ -875,5 +967,59 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+
+  /* Laser Scanning Beam */
+  laserBeam: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    height: 4,
+    zIndex: 10,
+    shadowColor: '#38BDF8',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  laserGradient: {
+    flex: 1,
+    borderRadius: 2,
+  },
+
+  /* Retake Floating Pill */
+  retakeFloatingPill: {
+    position: 'absolute',
+    top: 50,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    zIndex: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  retakeFloatingText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  /* Edit Data Action */
+  editDataBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  editDataText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563EB',
   },
 });
