@@ -18,8 +18,10 @@ import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Circle, Line } fr
 import api from '../services/api';
 import transactionService from '../services/transactionService';
 import budgetService from '../services/budgetService';
+import subscriptionService from '../services/subscriptionService';
 import { AuthContext } from '../context/AuthContext';
 import FloatingBottomNav from '../components/FloatingBottomNav';
+import RecurringBillsTracker from '../components/RecurringBillsTracker';
 
 const { width } = Dimensions.get('window');
 
@@ -338,52 +340,9 @@ export default function CalendarScreen({ navigation }) {
         setBudgetCap(Number(budgetRes.totalBudget) || 240000);
       }
 
-      // Populate detected / recurring bills
-      setBills([
-        {
-          id: 'bill-1',
-          title: 'Dialog Home Broadband',
-          amount: 'Rs. 3,490.00',
-          rawAmount: 3490,
-          category: 'Utilities',
-          icon: 'wifi-outline',
-          iconBg: '#F3E8FF',
-          iconColor: '#9333EA',
-          isActionable: true,
-          actionText: 'Pay Early',
-          status: 'Due Soon',
-          statusBg: '#FEF3C7',
-          statusColor: '#D97706',
-        },
-        {
-          id: 'bill-2',
-          title: 'CEB Electricity Bill',
-          amount: 'Rs. 8,250.00',
-          rawAmount: 8250,
-          category: 'Utilities',
-          icon: 'flash-outline',
-          iconBg: '#FEF3C7',
-          iconColor: '#D97706',
-          isActionable: false,
-          status: 'Auto-Debit 28th',
-          statusBg: '#DCFCE7',
-          statusColor: '#16A34A',
-        },
-        {
-          id: 'bill-3',
-          title: 'Netflix Premium Subscription',
-          amount: 'Rs. 2,200.00',
-          rawAmount: 2200,
-          category: 'Entertainment',
-          icon: 'film-outline',
-          iconBg: '#FEE2E2',
-          iconColor: '#EF4444',
-          isActionable: false,
-          status: 'Subscribed',
-          statusBg: '#E0F2FE',
-          statusColor: '#0284C7',
-        },
-      ]);
+      // Populate detected / recurring bills from subscriptionService
+      const subs = await subscriptionService.getSubscriptions().catch(() => []);
+      setBills(subs || []);
     } catch (e) {
       console.log('Error loading calendar data:', e.message);
     }
@@ -948,61 +907,23 @@ export default function CalendarScreen({ navigation }) {
             </LinearGradient>
           </View>
 
-          {/* Scheduled Recurring Bills */}
+          {/* Scheduled Recurring Bills Tracker */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Scheduled Recurring Bills</Text>
             {bills.length > 0 && (
               <View style={styles.upcomingPill}>
-                <Text style={styles.upcomingText}>{bills.length} Upcoming</Text>
+                <Text style={styles.upcomingText}>{bills.length} Tracked</Text>
               </View>
             )}
           </View>
 
-          <View style={styles.billsList}>
-            {bills.length === 0 ? (
-              <View style={styles.emptyBillsCard}>
-                <Ionicons name="calendar-outline" size={32} color="#94A3B8" style={{ marginBottom: 8 }} />
-                <Text style={styles.emptyBillsTitle}>No recurring bills due</Text>
-                <Text style={styles.emptyBillsSub}>
-                  Upcoming subscriptions and repeating bills will appear here automatically.
-                </Text>
-              </View>
-            ) : (
-              bills.map((bill) => (
-                <View key={bill.id} style={styles.billCard}>
-                  <View style={[styles.billIconCircle, { backgroundColor: bill.iconBg }]}>
-                    <Ionicons name={bill.icon} size={20} color={bill.iconColor} />
-                  </View>
-
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.billTitle}>{bill.title}</Text>
-                  </View>
-
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={[styles.billAmount, bill.amountColor && { color: bill.amountColor }]}>
-                      {bill.amount}
-                    </Text>
-
-                    {bill.isActionable ? (
-                      <TouchableOpacity
-                        style={styles.payEarlyBtn}
-                        activeOpacity={0.85}
-                        onPress={() => handleBillAction(bill)}
-                      >
-                        <Text style={styles.payEarlyText}>{bill.actionText}</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={[styles.statusBadge, { backgroundColor: bill.statusBg }]}>
-                        <Text style={[styles.statusText, { color: bill.statusColor }]}>
-                          {bill.status}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
+          <RecurringBillsTracker
+            navigation={navigation}
+            currency="Rs."
+            onBillsUpdated={(list) => {
+              setBills(list);
+            }}
+          />
 
           {/* Expenso Advisor AI Banner */}
           {showAdvisor && (
