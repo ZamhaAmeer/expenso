@@ -25,6 +25,7 @@ import { AuthContext } from '../context/AuthContext';
 import FloatingBottomNav from '../components/FloatingBottomNav';
 import SpendingHeatmap from '../components/SpendingHeatmap';
 import CurrencyConverterModal from '../components/CurrencyConverterModal';
+import RecurringBillsTracker from '../components/RecurringBillsTracker';
 
 const { width } = Dimensions.get('window');
 
@@ -698,6 +699,16 @@ export default function DashboardScreen({ navigation }) {
           <SpendingHeatmap
             heatmapData={summary.heatmapData}
             currency="Rs."
+          />
+
+          {/* Upcoming Recurring Subscriptions & Bills */}
+          <RecurringBillsTracker
+            compact={true}
+            currency="Rs."
+            navigation={navigation}
+            onBillsUpdated={() => {
+              loadData();
+            }}
           />
 
           {/* Recent Transactions Header */}
